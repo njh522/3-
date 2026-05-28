@@ -26,6 +26,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS submissions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item_code TEXT,
+            customer TEXT,
             target_month TEXT,
             lme_price REAL,
             exchange_rate REAL,
@@ -40,21 +41,23 @@ def init_db():
         CREATE TABLE IF NOT EXISTS actual_sales (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item_code TEXT,
+            customer TEXT,
             year INTEGER,
             month INTEGER,
             qty INTEGER,
             amount REAL,
-            UNIQUE(item_code, year, month)
+            UNIQUE(item_code, customer, year, month)
         )
     """)
-    # 3) 고객사 계획량 (Forecast) 테이블 (item_code, year, month 복합 기본키 적용)
+    # 3) 고객사 계획량 (Forecast) 테이블 (item_code, customer, year, month 복합 기본키 적용)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS customer_fcst (
             item_code TEXT,
+            customer TEXT,
             year INTEGER,
             month INTEGER,
             qty INTEGER,
-            PRIMARY KEY(item_code, year, month)
+            PRIMARY KEY(item_code, customer, year, month)
         )
     """)
     conn.commit()
@@ -432,9 +435,7 @@ def load_all_data(excels_mtime):
                 invalid_keywords = '소계|합계|TOTAL|Total|소 계'
                 df = df[~df['거래처'].astype(str).str.contains(invalid_keywords, na=False)]
                 
-                df_coway = df[df['거래처'].astype(str).str.contains('코웨이|Coway', case=False, na=False)].copy()
-                
-                cols = list(df_coway.columns)
+                cols = list(df.columns)
                 new_cols = []
                 for i, col in enumerate(cols):
                     if col in ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월', '년계']:
@@ -444,64 +445,65 @@ def load_all_data(excels_mtime):
                         new_cols.append(base + "_금액")
                     else:
                         new_cols.append(col)
-                df_coway.columns = new_cols
+                df.columns = new_cols
                 
-                num_cols = [c for c in df_coway.columns if c.endswith('_수량') or c.endswith('_금액')]
+                num_cols = [c for c in df.columns if c.endswith('_수량') or c.endswith('_금액')]
                 for col in num_cols:
-                    df_coway[col] = pd.to_numeric(df_coway[col], errors='coerce').fillna(0)
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
                     if col.endswith('_수량'):
-                        df_coway[col] = df_coway[col] * 1000
+                        df[col] = df[col] * 1000
                     elif col.endswith('_금액'):
-                        df_coway[col] = df_coway[col] * 1000000
+                        df[col] = df[col] * 1000000
                     
-                if '제품' in df_coway.columns:
-                    df_coway['제품'] = df_coway['제품'].ffill().fillna('미분류')
+                if '제품' in df.columns:
+                    df['제품'] = df['제품'].ffill().fillna('미분류')
                 else:
-                    df_coway['제품'] = '미분류'
+                    df['제품'] = '미분류'
                     
-                df_coway['연도'] = y
+                df['연도'] = y
                 
                 target_cols = ['연도', '거래처', '제품', '모델명', '년계_수량', '년계_금액']
                 for m in range(1, 13):
                     target_cols.extend([f'{m}월_수량', f'{m}월_금액'])
                     
                 for col in target_cols:
-                    if col not in df_coway.columns:
+                    if col not in df.columns:
                         if col == '연도':
-                            df_coway['연도'] = y
+                            df['연도'] = y
                         elif col == '제품':
-                            df_coway['제품'] = '미분류'
+                            df['제품'] = '미분류'
                         else:
-                            df_coway[col] = 0
+                            df[col] = 0
                 
-                df_coway_clean = df_coway[target_cols].copy()
-                dfs.append(df_coway_clean)
+                df_clean = df[target_cols].copy()
+                dfs.append(df_clean)
             except Exception as e:
                 st.error(f"{y}년 데이터 로드 실패: {e}")
                 
         if dfs:
             df_merged = pd.concat(dfs, ignore_index=True)
             
-            # 동일 모델명 및 연도로 중복 행들 합산 집계 (유실 방지)
+            # 동일 모델명, 거래처, 연도로 중복 행들 합산 집계 (유실 방지)
             agg_cols = []
             for m in range(1, 13):
                 agg_cols.extend([f"{m}월_수량", f"{m}월_금액"])
-            df_grouped = df_merged.groupby(['모델명', '연도'])[agg_cols].sum().reset_index()
+            df_grouped = df_merged.groupby(['모델명', '거래처', '연도'])[agg_cols].sum().reset_index()
             
             cursor.execute("DELETE FROM actual_sales")
             
             rows_to_insert = []
             for _, row in df_grouped.iterrows():
                 item_code = str(row['모델명']).strip()
+                customer = str(row['거래처']).strip()
                 year = int(row['연도'])
                 for m in range(1, 13):
                     qty_val = int(row.get(f"{m}월_수량", 0))
                     amt_val = float(row.get(f"{m}월_금액", 0.0))
-                    rows_to_insert.append((item_code, year, m, qty_val, amt_val))
+                    rows_to_insert.append((item_code, customer, year, m, qty_val, amt_val))
                     
             cursor.executemany("""
-                INSERT OR REPLACE INTO actual_sales (item_code, year, month, qty, amount)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO actual_sales (item_code, customer, year, month, qty, amount)
+                VALUES (?, ?, ?, ?, ?, ?)
             """, rows_to_insert)
             
             # 메타 업데이트
@@ -518,15 +520,14 @@ def load_all_data(excels_mtime):
     if df_long.empty:
         return pd.DataFrame()
         
-    pivoted_qty = df_long.pivot(index=['item_code', 'year'], columns='month', values='qty').fillna(0)
+    pivoted_qty = df_long.pivot(index=['item_code', 'customer', 'year'], columns='month', values='qty').fillna(0)
     pivoted_qty.columns = [f"{col}월_수량" for col in pivoted_qty.columns]
     
-    pivoted_amt = df_long.pivot(index=['item_code', 'year'], columns='month', values='amount').fillna(0)
+    pivoted_amt = df_long.pivot(index=['item_code', 'customer', 'year'], columns='month', values='amount').fillna(0)
     pivoted_amt.columns = [f"{col}월_금액" for col in pivoted_amt.columns]
     
     df_wide = pivoted_qty.join(pivoted_amt).reset_index()
-    df_wide.rename(columns={'item_code': '모델명', 'year': '연도'}, inplace=True)
-    df_wide['거래처'] = '코웨이'
+    df_wide.rename(columns={'item_code': '모델명', 'customer': '거래처', 'year': '연도'}, inplace=True)
     df_wide['제품'] = '미분류'
     
     qty_cols = [f"{m}월_수량" for m in range(1, 13)]
@@ -589,11 +590,18 @@ if df_raw.empty:
     st.error("❌ 실적 데이터를 불러오지 못했습니다. DB 상태를 확인해 주세요.")
     st.stop()
 
-# 고유한 품목(모델명) 리스트 추출
-model_list = sorted(df_raw['모델명'].dropna().unique().tolist())
+# 고유한 거래처(업체) 및 품목(모델명) 리스트 추출
+customer_list = sorted(df_raw['거래처'].dropna().unique().tolist())
 
 # ----------------- 세션 상태 관리 초기화 -----------------
-if 'model_select' not in st.session_state:
+if 'customer_select' not in st.session_state:
+    st.session_state.customer_select = customer_list[0] if customer_list else ""
+
+# 선택된 거래처에 해당되는 모델명 리스트만 동적으로 추출
+df_cust_only = df_raw[df_raw['거래처'] == st.session_state.customer_select]
+model_list = sorted(df_cust_only['모델명'].dropna().unique().tolist())
+
+if 'model_select' not in st.session_state or st.session_state.model_select not in model_list:
     st.session_state.model_select = model_list[0] if model_list else ""
 if 'target_month_select' not in st.session_state:
     st.session_state.target_month_select = "2026.06"
@@ -604,14 +612,14 @@ if 'model_type_select' not in st.session_state:
 st.markdown(f"""
 <div class="header-container">
     <div class="logo-text"><span class="logo-power">POWER</span><span class="logo-net">NET</span></div>
-    <div class="header-title">[코웨이 영업] 데이터 기반 수요 예측 분석기</div>
+    <div class="header-title">[영업팀] 데이터 기반 수요 예측 분석기</div>
     <div style="width: 150px;"></div> <!-- 대칭 정렬을 위한 빈 공간 -->
 </div>
 """, unsafe_allow_html=True)
 
 # ----------------- 데이터 가공 및 예측 엔진 사전 구동 -----------------
-# 1. 선택된 품목의 데이터 추출
-df_item = df_raw[df_raw['모델명'] == st.session_state.model_select].copy()
+# 1. 선택된 거래처 및 품목의 데이터 추출
+df_item = df_raw[(df_raw['모델명'] == st.session_state.model_select) & (df_raw['거래처'] == st.session_state.customer_select)].copy()
 
 # 2. 과거 5개년 월별 출하 추이 꺾은선 데이터 구성
 def get_yearly_monthly_qty(year_val):
@@ -668,6 +676,21 @@ with col_left:
     st.markdown('<div class="section-title">입력/조건</div>', unsafe_allow_html=True)
     
     with st.container():
+        # 거래처 (Customer) 드롭다운
+        selected_customer = st.selectbox(
+            "거래처 (Customer)",
+            options=customer_list,
+            index=customer_list.index(st.session_state.customer_select) if st.session_state.customer_select in customer_list else 0,
+            key="customer_select_box"
+        )
+        if selected_customer != st.session_state.customer_select:
+            st.session_state.customer_select = selected_customer
+            # 거래처가 바뀌면 모델 리스트가 달라지므로 새로운 거래처의 첫 번째 모델로 세션을 초기화
+            df_cust_only = df_raw[df_raw['거래처'] == selected_customer]
+            new_model_list = sorted(df_cust_only['모델명'].dropna().unique().tolist())
+            st.session_state.model_select = new_model_list[0] if new_model_list else ""
+            st.rerun()
+
         # 품목 코드 드롭다운
         selected_model = st.selectbox(
             "품목 코드 (Item Code)",
@@ -690,7 +713,7 @@ with col_left:
 
     # 1) 고객사 FCST 관리 아코디언 (A/B/C 일괄 구현)
     st.markdown('<div style="margin-top: 15px;"></div>', unsafe_allow_html=True)
-    with st.expander("📊 고객사 FCST 관리 (계획량)"):
+    with st.expander(f"📊 고객사 FCST 관리 (계획량) - {st.session_state.customer_select}"):
         st.markdown("**[옵션 B] 엑셀 파일 업로드**")
         uploaded_fcst_file = st.file_uploader(
             "FCST 엑셀 업로드 (품목, 월별 수량 포함)",
@@ -737,9 +760,9 @@ with col_left:
                             qty_val = int(qty_val) if not pd.isna(qty_val) else 0
                             
                             cursor.execute("""
-                                INSERT OR REPLACE INTO customer_fcst (item_code, year, month, qty)
-                                VALUES (?, 2026, ?, ?)
-                            """, (up_item, m_val, qty_val))
+                                INSERT OR REPLACE INTO customer_fcst (item_code, customer, year, month, qty)
+                                VALUES (?, ?, 2026, ?, ?)
+                            """, (up_item, st.session_state.customer_select, m_val, qty_val))
                             inserted_cnt += 1
                     conn.commit()
                     conn.close()
@@ -748,6 +771,7 @@ with col_left:
             except Exception as e:
                 st.error(f"❌ 파싱 오류: {e}")
 
+         # 옵션 A
         st.markdown("---")
         st.markdown("**[옵션 A] 직접 수동 기입**")
         manual_vals = {}
@@ -756,7 +780,8 @@ with col_left:
             # 기존 FCST 조회
             conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
             cursor = conn.cursor()
-            cursor.execute("SELECT qty FROM customer_fcst WHERE item_code = ? AND year = 2026 AND month = ?", (st.session_state.model_select, m_val))
+            cursor.execute("SELECT qty FROM customer_fcst WHERE item_code = ? AND customer = ? AND year = 2026 AND month = ?", 
+                           (st.session_state.model_select, st.session_state.customer_select, m_val))
             res = cursor.fetchone()
             conn.close()
             db_fcst_val = res[0] if res else int(qty_average[m_val - 1] * 0.98)
@@ -774,25 +799,20 @@ with col_left:
             cursor = conn.cursor()
             for m_val, qty_val in manual_vals.items():
                 cursor.execute("""
-                    INSERT OR REPLACE INTO customer_fcst (item_code, year, month, qty)
-                    VALUES (?, 2026, ?, ?)
-                """, (st.session_state.model_select, m_val, int(qty_val)))
+                    INSERT OR REPLACE INTO customer_fcst (item_code, customer, year, month, qty)
+                    VALUES (?, ?, 2026, ?, ?)
+                """, (st.session_state.model_select, st.session_state.customer_select, m_val, int(qty_val)))
             conn.commit()
             conn.close()
             st.success("✅ FCST 수동 저장 성공!")
             st.rerun()
 
     st.markdown('<div style="margin-top: 15px;"></div>', unsafe_allow_html=True)
-    
-    # 좌측 UI에서 실적 입력 및 동기화 관련 버튼 제거 완료
-
-    # 최종 입력 및 공유 버튼 좌측 하단으로 배치
     st.markdown('<div style="margin-top: 15px;"></div>', unsafe_allow_html=True)
     submit_btn = st.button("최종 입력 및 공유 (Submit to PSI) 📤", use_container_width=True, type="primary")
     
     if submit_btn:
         try:
-            # 외부 변수 배제에 따른 기본 상수 설정 적재
             lme_price = 0.0
             exchange_rate = 0.0
             price_change_rate = 0.0
@@ -804,10 +824,11 @@ with col_left:
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             cursor.execute("""
                 INSERT INTO submissions 
-                (item_code, target_month, lme_price, exchange_rate, price_change_rate, operating_profit_rate, ai_recommendation, submitted_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (item_code, customer, target_month, lme_price, exchange_rate, price_change_rate, operating_profit_rate, ai_recommendation, submitted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 selected_model,
+                st.session_state.customer_select,
                 selected_month_str,
                 lme_price,
                 exchange_rate,
@@ -1052,7 +1073,7 @@ with col_right:
     st.markdown('<div style="font-size:1.0rem; font-weight:700; color:#374151; margin-top:20px; margin-bottom:10px;">수요 예측 종합 PSI 대조 테이블 (담당자 감 조율용)</div>', unsafe_allow_html=True)
     
     col_names = [f"{data['월']}" for data in four_months_data]
-    labels = ['AI 최종 추천량 (대)', '과거 3개년 평균 출하량 (대)', '직전 연도(2025년) 동월 실적 (대)', '코웨이 Forecast 계획량 (대)']
+    labels = ['AI 최종 추천량 (대)', '과거 3개년 평균 출하량 (대)', '직전 연도(2025년) 동월 실적 (대)', f'{st.session_state.customer_select} Forecast 계획량 (대)']
     
     row_ai = []
     row_avg = []
@@ -1067,8 +1088,8 @@ with col_right:
         m_val = (target_month_int + i - 1) % 12 + 1
         target_months.append(m_val)
     placeholders = ",".join("?" for _ in target_months)
-    cursor.execute(f"SELECT month, qty FROM customer_fcst WHERE item_code = ? AND year = 2026 AND month IN ({placeholders})", 
-                   [st.session_state.model_select] + target_months)
+    cursor.execute(f"SELECT month, qty FROM customer_fcst WHERE item_code = ? AND customer = ? AND year = 2026 AND month IN ({placeholders})", 
+                   [st.session_state.model_select, st.session_state.customer_select] + target_months)
     fcst_results = dict(cursor.fetchall())
     conn.close()
     
@@ -1081,7 +1102,7 @@ with col_right:
         row_avg.append(f"{qty_average[m_val - 1]:,.0f}")
         # 3) 2025년 실적
         row_2025.append(f"{qty_2025[m_val - 1]:,.0f}")
-        # 4) 코웨이 Forecast (DB 등록값이 있으면 사용, 없으면 폴백)
+        # 4) Forecast (DB 등록값이 있으면 사용, 없으면 폴백)
         db_fcst_qty = fcst_results.get(m_val)
         if db_fcst_qty is not None:
             row_forecast.append(f"{db_fcst_qty:,.0f}")
