@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local Database
+sales_forecast.db
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# IDE files
+.vscode/
+.idea/
