@@ -4,8 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Local Database
-sales_forecast.db
+
 
 # Virtual Environment
 venv/
