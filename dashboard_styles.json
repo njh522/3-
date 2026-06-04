@@ -1,0 +1,98 @@
+{
+  "primaryBg": "rgb(15, 23, 42)",
+  "textColor": "rgb(248, 250, 252)",
+  "sidebarBg": "rgba(0, 0, 0, 0)",
+  "sidebarWidth": 207,
+  "mainDisplay": "block",
+  "mainPadding": "0px",
+  "mainGap": "normal",
+  "cardsInfo": [
+    {
+      "tagName": "DIV",
+      "className": "w-full",
+      "bg": "rgb(30, 41, 59)",
+      "shadow": "rgba(0, 0, 0, 0.1) 0px 1px 3px 0px",
+      "radius": "10px",
+      "padding": "4px 10px",
+      "margin": "0px",
+      "border": "1px solid rgb(51, 65, 85)"
+    },
+    {
+      "tagName": "DIV",
+      "className": "bg-blue-50 dark:bg-blue-900/20",
+      "bg": "rgba(30, 58, 138, 0.2)",
+      "shadow": "none",
+      "radius": "6px",
+      "padding": "0px",
+      "margin": "0px",
+      "border": "0px solid rgb(229, 231, 235)"
+    },
+    {
+      "tagName": "DIV",
+      "className": "w-full",
+      "bg": "rgb(30, 41, 59)",
+      "shadow": "rgba(0, 0, 0, 0.1) 0px 1px 3px 0px",
+      "radius": "10px",
+      "padding": "4px 10px",
+      "margin": "0px",
+      "border": "1px solid rgb(51, 65, 85)"
+    },
+    {
+      "tagName": "DIV",
+      "className": "bg-slate-50 dark:bg-slate-900/20",
+      "bg": "rgba(15, 23, 42, 0.2)",
+      "shadow": "none",
+      "radius": "6px",
+      "padding": "0px",
+      "margin": "0px",
+      "border": "0px solid rgb(229, 231, 235)"
+    },
+    {
+      "tagName": "DIV",
+      "className": "w-full",
+      "bg": "rgb(30, 41, 59)",
+      "shadow": "rgba(0, 0, 0, 0.1) 0px 1px 3px 0px",
+      "radius": "10px",
+      "padding": "4px 10px",
+      "margin": "0px",
+      "border": "1px solid rgb(51, 65, 85)"
+    }
+  ],
+  "headings": [
+    {
+      "tag": "H2",
+      "fontFamily": "\"Malgun Gothic\", \"맑은 고딕\", \"Apple SD Gothic Neo\", \"Noto Sans CJK KR\", sans-serif",
+      "fontSize": "18px",
+      "fontWeight": "700",
+      "color": "rgb(248, 250, 252)"
+    },
+    {
+      "tag": "H1",
+      "fontFamily": "\"Malgun Gothic\", \"맑은 고딕\", \"Apple SD Gothic Neo\", \"Noto Sans CJK KR\", sans-serif",
+      "fontSize": "24px",
+      "fontWeight": "700",
+      "color": "rgb(255, 255, 255)"
+    },
+    {
+      "tag": "H3",
+      "fontFamily": "\"Malgun Gothic\", \"맑은 고딕\", \"Apple SD Gothic Neo\", \"Noto Sans CJK KR\", sans-serif",
+      "fontSize": "18px",
+      "fontWeight": "600",
+      "color": "rgb(255, 255, 255)"
+    },
+    {
+      "tag": "H3",
+      "fontFamily": "\"Malgun Gothic\", \"맑은 고딕\", \"Apple SD Gothic Neo\", \"Noto Sans CJK KR\", sans-serif",
+      "fontSize": "18px",
+      "fontWeight": "600",
+      "color": "rgb(255, 255, 255)"
+    },
+    {
+      "tag": "H3",
+      "fontFamily": "\"Malgun Gothic\", \"맑은 고딕\", \"Apple SD Gothic Neo\", \"Noto Sans CJK KR\", sans-serif",
+      "fontSize": "18px",
+      "fontWeight": "600",
+      "color": "rgb(255, 255, 255)"
+    }
+  ]
+}
