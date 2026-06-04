@@ -70,16 +70,16 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
     
-    /* 기본 폰트 및 다크 배경 설정 */
+    /* 기본 폰트 및 다크 배경 설정 (삼광 AI 포털 스타일) */
     html, body, [class*="css"], .stMarkdown {
-        font-family: 'Outfit', 'Noto Sans KR', sans-serif;
-        background-color: #0c1020;
-        color: #e2e8f0;
+        font-family: 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'Noto Sans CJK KR', sans-serif !important;
+        background-color: #0f172a;
+        color: #f8fafc;
     }
     
     /* 메인 앱 백그라운드 색상 변경 */
     .stApp {
-        background-color: #0c1020;
+        background-color: #0f172a;
     }
     
     /* 여백 조정 */
@@ -92,11 +92,11 @@ st.markdown("""
     
     /* 사이드바 스타일 커스텀 */
     [data-testid="stSidebar"] {
-        background-color: #121829 !important;
+        background-color: #0b0f19 !important;
         border-right: 1px solid #1e293b;
     }
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
-        color: #e2e8f0;
+        color: #f8fafc;
     }
     
     /* 헤더 스타일 */
@@ -104,12 +104,12 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background-color: #161b30;
+        background-color: #1e293b;
         padding: 0.8rem 2rem;
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
         margin-bottom: 1.2rem;
-        border: 1px solid #1e293b;
+        border: 1px solid #334155;
     }
     
     .logo-text {
@@ -122,7 +122,7 @@ st.markdown("""
         font-style: italic;
     }
     .logo-net {
-        color: #00b4d8;
+        color: #38bdf8;
     }
     
     .header-title {
@@ -155,7 +155,7 @@ st.markdown("""
         font-weight: 700;
         padding: 2px 6px;
         border-radius: 4px;
-        background: #1e293b;
+        background: #0f172a;
         color: #cbd5e1;
         border: 1px solid #334155;
     }
@@ -181,33 +181,33 @@ st.markdown("""
         top: 3px;
         bottom: 3px;
         width: 4px;
-        background-color: #00b4d8;
+        background-color: #38bdf8;
         border-radius: 2px;
     }
     
     /* 대시보드 카드 기본 스타일 */
     .dashboard-card {
-        background-color: #161b30;
-        border-radius: 14px;
+        background-color: #1e293b;
+        border-radius: 10px;
         padding: 1.2rem;
-        border: 1px solid #1e293b;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        border: 1px solid #334155;
+        box-shadow: rgba(0, 0, 0, 0.1) 0px 1px 3px 0px;
         margin-bottom: 1rem;
     }
     
     /* KPI 블록 카드 스타일 */
     .kpi-card {
-        background-color: #161b30;
-        border-radius: 12px;
-        padding: 0.9rem;
-        border: 1px solid #1e293b;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        background-color: #1e293b;
+        border-radius: 10px;
+        padding: 0.8rem;
+        border: 1px solid #334155;
+        box-shadow: rgba(0, 0, 0, 0.1) 0px 1px 3px 0px;
         text-align: center;
         transition: all 0.2s ease;
     }
     .kpi-card:hover {
         transform: translateY(-2px);
-        border-color: #334155;
+        border-color: #475569;
     }
     .kpi-label {
         font-size: 0.75rem;
@@ -219,7 +219,7 @@ st.markdown("""
     .kpi-value {
         font-size: 1.35rem;
         font-weight: 800;
-        color: #ffffff;
+        color: #f8fafc;
     }
     .kpi-sub {
         font-size: 0.75rem;
@@ -229,17 +229,17 @@ st.markdown("""
     
     /* AI Insight 요약 영역 스타일 */
     .insight-card {
-        background-color: #161b30;
-        border-radius: 12px;
+        background-color: #1e293b;
+        border-radius: 10px;
         padding: 1.2rem;
-        border: 1px solid #1e293b;
+        border: 1px solid #334155;
         height: 100%;
     }
     .insight-title {
         font-size: 1rem;
         font-weight: 700;
         color: #ffffff;
-        border-bottom: 1px solid #1e293b;
+        border-bottom: 1px solid #334155;
         padding-bottom: 6px;
         margin-bottom: 10px;
     }
@@ -260,7 +260,7 @@ st.markdown("""
         background-color: #0f172a;
         padding: 8px 12px;
         border-radius: 8px;
-        border-left: 3px solid #00b4d8;
+        border-left: 3px solid #38bdf8;
     }
     
     /* 녹색 제출 버튼 스타일 */
@@ -302,7 +302,7 @@ st.markdown("""
         color: #475569;
         margin-top: 1.5rem;
         padding-top: 0.8rem;
-        border-top: 1px solid #1e293b;
+        border-top: 1px solid #334155;
     }
 </style>
 "";
