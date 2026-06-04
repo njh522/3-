@@ -840,7 +840,6 @@ with col_left:
             conn.commit()
             conn.close()
             
-            st.balloons()
             st.success(f"""
             🎉 **PSI 제출 및 공유 성공!**
             - **품목**: {selected_model}

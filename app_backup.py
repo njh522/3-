@@ -519,7 +519,6 @@ with tab4:
             
             # 최종 정합성 판정
             if pandas_count == db_count and qty_match and amt_match and all(r['검증 상태'] == "✅ 일치" for r in sample_results):
-                st.balloons()
                 st.success("🎉 **데이터베이스 정합성 검증 완료**: 데이터 누락 및 위변조 없이 안전하게 적재되었습니다.")
             else:
                 st.warning("⚠️ **정합성 경고**: 일부 검증 단계에서 오차가 식별되었습니다. 원본 데이터 소스를 체크하세요.")
