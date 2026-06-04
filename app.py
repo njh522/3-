@@ -70,6 +70,11 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
     
+    /* 최상단 헤더 흰색 영역 제거 (투명화) */
+    header[data-testid="stHeader"] {
+        background-color: rgba(0, 0, 0, 0) !important;
+    }
+    
     /* 기본 폰트 및 다크 배경 설정 (삼광 AI 포털 스타일) */
     html, body, [class*="css"], .stMarkdown {
         font-family: 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'Noto Sans CJK KR', sans-serif !important;
