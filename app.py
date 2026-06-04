@@ -305,26 +305,6 @@ st.markdown("""
         border-top: 1px solid #334155;
     }
 </style>
-"";
-        letter-spacing: 0.5px;
-    }
-    .submit-subtext {
-        font-size: 0.8rem;
-        opacity: 0.9;
-        margin-top: 4px;
-    }
-    
-    /* 풋터 스타일 */
-    .footer-container {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.75rem;
-        color: #9ca3af;
-        margin-top: 1.5rem;
-        padding-top: 0.8rem;
-        border-top: 1px solid #eaedf2;
-    }
-</style>
 """, unsafe_allow_html=True)
 
 # ----------------- 데이터 로드 및 전처리 -----------------
@@ -812,19 +792,6 @@ if submit_btn:
 # ==========================================
 # 2. 메인 영역 렌더링
 # ==========================================
-# 메인 헤더 및 배너
-st.markdown(f"""
-<div class="header-container">
-    <div class="logo-text"><span class="logo-power">POWER</span><span class="logo-net">NET</span></div>
-    <div class="header-title">코웨이 영업 수요 예측 분석 대시보드</div>
-    <div class="ai-tools-container">
-        <span class="ai-tools-title">AI Engine</span>
-        <span class="ai-tool-badge badge-claude">Claude Code</span>
-        <span class="ai-tool-badge badge-cursor">Cursor</span>
-        <span class="ai-tool-badge badge-antigravity">Antigravity</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
 
 # DB에서 고객사 계획량(FCST) 데이터 조회 (상단 KPI용)
 conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
