@@ -434,6 +434,123 @@ def calculate_fcst_accuracy(customer, item_code):
     except Exception:
         return 0.0, 1.0, pd.DataFrame()
 
+# --- SCM 의사결정 지원 분석 엔진 추가 ---
+def analyze_scm_metrics(customer, item_code, qty_average):
+    try:
+        conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
+        df_sales = pd.read_sql_query("""
+            SELECT qty FROM actual_sales 
+            WHERE customer = ? AND item_code = ? AND year IN (2023, 2024, 2025)
+        """, conn, params=(customer, item_code))
+        conn.close()
+        
+        import numpy as np
+        if not df_sales.empty and df_sales['qty'].mean() > 0:
+            mean_val = df_sales['qty'].mean()
+            std_val = df_sales['qty'].std()
+            cv = std_val / mean_val if mean_val > 0 else 0.0
+        else:
+            mean_val = np.mean(qty_average) if qty_average else 0.0
+            std_val = np.std(qty_average) if qty_average else 0.0
+            cv = std_val / mean_val if mean_val > 0 else 0.0
+    except Exception:
+        cv = 0.0
+        
+    # 변동성 등급 진단
+    if cv < 0.20:
+        volatility_class = "🟢 안정적 계절성"
+        risk_level = "안정"
+    elif cv < 0.40:
+        volatility_class = "🟡 수요 변동성 보통"
+        risk_level = "보통"
+    else:
+        volatility_class = "🔴 고변동성 위험 (재고 리스크)"
+        risk_level = "위험"
+        
+    # 계절성 판정 (최대/최소 격차 비율이 평균의 40% 이상인 경우 계절성 품목으로 분류)
+    import numpy as np
+    avg_mean = np.mean(qty_average) if qty_average else 0
+    if avg_mean > 0:
+        max_min_ratio = (max(qty_average) - min(qty_average)) / avg_mean
+        is_seasonal = max_min_ratio > 0.40
+    else:
+        is_seasonal = False
+        
+    return cv, volatility_class, risk_level, is_seasonal
+
+def detect_forecast_anomalies(df_accuracy_hist):
+    anomalies = []
+    if df_accuracy_hist.empty or 'accuracy' not in df_accuracy_hist.columns:
+        return anomalies
+    
+    # 적중률 70% 미만(오차 30% 초과)인 달 추출
+    df_bad = df_accuracy_hist[df_accuracy_hist['accuracy'] < 70.0].copy()
+    for _, row in df_bad.iterrows():
+        y = int(row['year'])
+        m = int(row['month'])
+        fcst = int(row['fcst_qty'])
+        act = int(row['actual_qty'])
+        err_pct = ((act - fcst) / fcst * 100) if fcst > 0 else 0.0
+        
+        direction = "과소 예측(납기 지연 우려)" if err_pct > 0 else "과대 예측(자재 과적재 리스크)"
+        comment = f"{y}년 {m}월: 계획 {fcst:,.0f}대 대비 실제 출하 {act:,.0f}대 ({err_pct:+.1f}% 편차) -> {direction} 발생"
+        anomalies.append({
+            'period': f"{y}.{m:02d}",
+            'fcst': fcst,
+            'act': act,
+            'diff_pct': err_pct,
+            'comment': comment
+        })
+    return anomalies
+
+def calculate_4month_procurement_guide(customer, item_code, target_month_int, bias_val, df_accuracy_hist, qty_average):
+    import math
+    import numpy as np
+    
+    if not df_accuracy_hist.empty and 'error' in df_accuracy_hist.columns:
+        std_error = df_accuracy_hist['error'].std()
+        if pd.isna(std_error):
+            std_error = df_accuracy_hist['error'].mean() if not df_accuracy_hist['error'].empty else 1000.0
+    else:
+        std_error = np.mean(qty_average) * 0.15 if qty_average else 1000.0
+        
+    # D-2일 리드타임 적용 안전재고 공식: 1.65 (95% 신뢰 수준) * 표준 오차 * sqrt(2일 / 30일)
+    safety_factor = 1.65
+    lead_time_days = 2.0
+    days_in_month = 30.0
+    safety_stock = safety_factor * std_error * math.sqrt(lead_time_days / days_in_month)
+    safety_stock = max(0, int(safety_stock))
+    
+    guide_list = []
+    conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
+    cursor = conn.cursor()
+    target_months = [(target_month_int + i - 1) % 12 + 1 for i in range(4)]
+    placeholders = ",".join("?" for _ in target_months)
+    cursor.execute(f"SELECT month, qty FROM customer_fcst WHERE item_code = ? AND customer = ? AND year = 2026 AND month IN ({placeholders})", 
+                   [item_code, customer] + target_months)
+    fcst_results = dict(cursor.fetchall())
+    conn.close()
+    
+    for i in range(4):
+        m_val = (target_month_int + i - 1) % 12 + 1
+        db_fcst = fcst_results.get(m_val)
+        fcst_qty = db_fcst if db_fcst is not None else int(qty_average[m_val - 1] * 0.98)
+        
+        # Bias 보정량 산출 (실제판매 / 계획 편향 반영)
+        adjusted_base = int(fcst_qty * bias_val)
+        
+        # 최종 자재 권장 준비량 (보정량 + 안전재고)
+        recommended_qty = adjusted_base + safety_stock
+        
+        guide_list.append({
+            'month': f"{m_val}월",
+            'original_fcst': fcst_qty,
+            'bias_adjusted': adjusted_base,
+            'safety_stock': safety_stock,
+            'recommended': recommended_qty
+        })
+    return guide_list
+
 coway_map = load_coway_code_map()
 
 # AI 예측 사유 생성 유틸리티
@@ -577,7 +694,7 @@ target_month_int = int(selected_month_str.split(".")[1])
 
 # 고객사 FCST 관리 아코디언
 with st.sidebar.expander(f"📊 고객사 FCST 계획 관리"):
-    st.markdown("**[옵션 B] 엑셀 파일 업로드**")
+    st.markdown("**엑셀 파일 업로드**")
     uploaded_fcst_file = st.file_uploader("FCST 엑셀 업로드", type=["xlsx", "xls"], key="fcst_uploader")
     if uploaded_fcst_file is not None:
         try:
@@ -623,39 +740,6 @@ with st.sidebar.expander(f"📊 고객사 FCST 계획 관리"):
         except Exception as e:
             st.error(f"❌ 파싱 오류: {e}")
 
-    st.markdown("---")
-    st.markdown("**[옵션 A] 직접 수동 기입**")
-    manual_vals = {}
-    for idx in range(4):
-        m_val = (target_month_int + idx - 1) % 12 + 1
-        conn = sqlite3.connect('sales_forecast.db')
-        cursor = conn.cursor()
-        cursor.execute("SELECT qty FROM customer_fcst WHERE item_code = ? AND customer = ? AND year = 2026 AND month = ?", 
-                       (st.session_state.model_select, st.session_state.customer_select, m_val))
-        res = cursor.fetchone()
-        conn.close()
-        db_fcst_val = res[0] if res else int(qty_average[m_val - 1] * 0.98)
-        
-        manual_vals[m_val] = st.number_input(
-            f"{m_val}월 계획 수량 (대)",
-            min_value=0,
-            value=int(db_fcst_val),
-            step=100,
-            key=f"fcst_manual_{m_val}"
-        )
-        
-    if st.button("FCST 수동 업데이트 💾", use_container_width=True):
-        conn = sqlite3.connect('sales_forecast.db')
-        cursor = conn.cursor()
-        for m_val, qty_val in manual_vals.items():
-            cursor.execute("""
-                INSERT OR REPLACE INTO customer_fcst (item_code, customer, year, month, qty)
-                VALUES (?, ?, 2026, ?, ?)
-            """, (st.session_state.model_select, st.session_state.customer_select, m_val, int(qty_val)))
-        conn.commit()
-        conn.close()
-        st.success("✅ FCST 수동 저장 성공!")
-        st.rerun()
 
 st.sidebar.markdown('<div style="margin-top: 15px;"></div>', unsafe_allow_html=True)
 submit_btn = st.sidebar.button("최종 입력 및 공유 (Submit to PSI) 📤", use_container_width=True, type="primary")
@@ -745,6 +829,20 @@ with cols_kpi[5]:
 
 st.markdown('<div style="margin-top: 15px;"></div>', unsafe_allow_html=True)
 
+# SCM 변동성 및 계절성 리스크 진단 배너
+cv_val, vol_class, risk_lvl, is_seasonal_flag = analyze_scm_metrics(
+    st.session_state.customer_select, 
+    st.session_state.model_select, 
+    qty_average
+)
+
+if risk_lvl == "위험":
+    st.error(f"⚠️ **자재 재고 리스크 경고 (고변동성 품목)**: 이 모델은 과거 출하량 변동성이 매우 높은 **고위험군({vol_class}, CV: {cv_val:.2f})**입니다. 단순 고객사 계획이나 AI 예측만 믿고 자재를 구매할 경우 심각한 재고 과적재 또는 공급 부족 손실이 발생할 수 있습니다. 하단의 **'자재 KIT 조달 권장 가이드'**를 필히 참고하십시오.")
+elif is_seasonal_flag:
+    st.info(f"📈 **계절성 패턴 지배 품목**: 이 모델은 과거 계절별 출하 특징이 뚜렷한 **안정적 계절성({vol_class})** 품목입니다. 시기별 가중치 흐름에 맞춰 조율하는 것이 효율적입니다.")
+else:
+    st.success(f"✅ **수요 변동성 안정 품목**: 이 모델은 출하 패턴 및 계획 변동폭이 안정적인 수준(**{vol_class}**)으로 유지되고 있습니다. 비교적 안전하게 자재 조달 계획을 수립할 수 있습니다.")
+
 # ----------------- 탭 구성 -----------------
 tab1, tab2 = st.tabs(["📊 AI 수요 예측 분석", "🎯 고객사 FCST 정확도 분석"])
 
@@ -754,20 +852,23 @@ with tab1:
     fig_lines = go.Figure()
     display_months = [f"{m}월" for m in range(1, 13)]
     
+    # 과거 실적선들은 투명도가 있는 슬레이트 그레이 색상으로 강조를 줄이고,
+    # 2023년, 2024년은 기본값으로 보이지 않게(visible="legendonly") 설정하여 초기 노이즈를 최소화합니다.
     years_style = {
-        "2023년": (qty_2023, "#2dd4bf", 2.0, None),
-        "2024년": (qty_2024, "#3b82f6", 2.0, None),
-        "2025년": (qty_2025, "#00b4d8", 2.5, None),
-        "Seasonal Average": (qty_average, "#a855f7", 2.2, "dash")
+        "2023년 실적": (qty_2023, "rgba(148, 163, 184, 0.35)", 1.2, None, "legendonly"),
+        "2024년 실적": (qty_2024, "rgba(148, 163, 184, 0.5)", 1.2, None, "legendonly"),
+        "2025년 실적": (qty_2025, "rgba(148, 163, 184, 0.85)", 1.5, None, True),
+        "3개년 평균 출하": (qty_average, "rgba(168, 85, 247, 0.65)", 1.5, "dash", True)
     }
     
-    for name, (qty_list, color, width, dash_style) in years_style.items():
+    for name, (qty_list, color, width, dash_style, visibility) in years_style.items():
         fig_lines.add_trace(go.Scatter(
             x=display_months,
             y=qty_list,
             name=name,
             mode='lines',
-            line=dict(color=color, width=width, dash=dash_style),
+            line=dict(color=color, width=width, dash=dash_style, shape='spline'),
+            visible=visibility,
             hoverinfo='text+name',
             hovertext=[f"{q:,.0f}대" for q in qty_list]
         ))
@@ -793,33 +894,36 @@ with tab1:
             x=proj_months + proj_months[::-1],
             y=y_upper + y_lower[::-1],
             fill='toself',
-            fillcolor='rgba(255, 90, 31, 0.08)',
+            fillcolor='rgba(255, 90, 31, 0.04)', # 신뢰구간은 거의 보이지 않게 아주 연하게
             line=dict(color='rgba(255, 90, 31, 0)'),
             hoverinfo="skip",
             showlegend=True,
-            name="AI 예측 신뢰구간"
+            name="AI 예측 신뢰범위"
         ))
         
+    # 2026년 실제 실적은 선명하고 눈에 띄는 하늘색(스카이블루)으로 강조
     if last_actual_month > 0:
         fig_lines.add_trace(go.Scatter(
             x=display_months[:last_actual_month],
             y=qty_2026[:last_actual_month],
             name="2026년 실제 실적",
             mode='lines+markers',
-            line=dict(color="#ff5a1f", width=4.0),
-            marker=dict(size=7),
+            line=dict(color="#00b4d8", width=3.5, shape='spline'),
+            marker=dict(size=6, symbol="circle"),
             hoverinfo='text+name',
             hovertext=[f"{q:,.0f}대" for q in qty_2026[:last_actual_month]]
         ))
         
+    # 2026년 AI 예측치는 선명한 주황색 점선으로 강조하여 흐름이 이어지게 함
     if last_actual_month < 12:
         start_idx = max(0, last_actual_month - 1)
         fig_lines.add_trace(go.Scatter(
             x=display_months[start_idx:12],
             y=qty_2026[start_idx:12],
             name="2026년 AI 예측",
-            mode='lines',
-            line=dict(color="#ff5a1f", width=4.0, dash="dash"),
+            mode='lines+markers',
+            line=dict(color="#ff5a1f", width=3.5, dash="dash", shape='spline'),
+            marker=dict(size=5, symbol="circle-open"),
             hoverinfo='text+name',
             hovertext=[f"{q:,.0f}대" for q in qty_2026[start_idx:12]]
         ))
@@ -831,8 +935,8 @@ with tab1:
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10, color="#cbd5e1")),
-        xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(size=11, color="#94a3b8")),
-        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", range=[0, max_y_limit * 1.15], tickfont=dict(size=11, color="#94a3b8"))
+        xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=11, color="#94a3b8")),
+        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.04)", range=[0, max_y_limit * 1.15], tickfont=dict(size=11, color="#94a3b8"))
     )
     st.plotly_chart(fig_lines, use_container_width=True, config={'displayModeBar': False})
     
@@ -901,6 +1005,37 @@ with tab1:
         df_psi = pd.DataFrame([row_ai, row_avg, row_2025, row_forecast], columns=col_names, index=labels)
         st.dataframe(df_psi, use_container_width=True)
         st.markdown('<div style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; line-height: 1.4;">* 담당자께서는 AI의 정량적 통계 예측치와 과거 패턴/직전 실적 데이터를 비교하여 정성적 영업 조율(감)을 최종 반영하실 수 있습니다.</div>', unsafe_allow_html=True)
+
+        # 4개월 자재/생산 준비 가이드라인 연산 및 렌더링
+        procurement_guide = calculate_4month_procurement_guide(
+            st.session_state.customer_select,
+            st.session_state.model_select,
+            target_month_int,
+            bias_val,
+            df_accuracy_hist,
+            qty_average
+        )
+        
+        st.markdown('<div style="margin-top: 20px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">📋 4개월 자재 KIT 조달 및 생산 준비 권장 가이드 (SCM 의사결정)</div>', unsafe_allow_html=True)
+        
+        # 가이드라인 표 데이터프레임 변환
+        guide_rows = []
+        for item in procurement_guide:
+            guide_rows.append([
+                item['month'],
+                f"{item['original_fcst']:,.0f} 대",
+                f"{item['bias_adjusted']:,.0f} 대",
+                f"{item['safety_stock']:,.0f} 대",
+                f"{item['recommended']:,.0f} 대"
+            ])
+            
+        df_guide_show = pd.DataFrame(
+            guide_rows, 
+            columns=['대상 월', '고객사 FCST 계획', '오차 편향 보정 수량', '안전 재고 (D-2 리드타임 적용)', '★ 최종 자재 준비 권장량 (KIT 구매)']
+        )
+        st.dataframe(df_guide_show, use_container_width=True)
+        st.markdown('<div style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; line-height: 1.4;">* <strong>안전 재고 공식</strong>: 과거 오차 분산 및 코웨이 납품 시차(D-2일 리드타임)를 고려한 통계적 안전재고량(95% 서비스율)입니다.<br>* <strong>최종 자재 준비 권장량</strong>: 단순 FCST 계획에 과거 과대/과소 예측 편향(Bias)을 조정한 후, 안전재고를 가산하여 자재 조달 과부족 리스크를 예방하기 위한 최적의 의사결정 수치입니다.</div>', unsafe_allow_html=True)
 
 with tab2:
     st.markdown('<div class="section-title">고객사 계획(FCST) 정확도 및 오차 추이 분석</div>', unsafe_allow_html=True)
@@ -973,6 +1108,20 @@ with tab2:
             '절대 오차(대)': '{:,.0f}',
             '적중률(%)': '{:.1f}%'
         }), use_container_width=True)
+
+        # 과거 주요 계획 변동 특이점(Anomaly) 분석 렌더링
+        anomalies = detect_forecast_anomalies(df_accuracy_hist)
+        st.markdown('<div style="margin-top: 20px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">📈 과거 주요 계획 변동 특이점 분석 (적중률 70% 미만 시점)</div>', unsafe_allow_html=True)
+        if not anomalies:
+            st.success("🎉 과거 3개년 동안 계획과 실적의 격차가 30% 이상 크게 벌어진 특이사항이 없습니다. 계획 수립이 매우 안정적입니다.")
+        else:
+            for anomaly in anomalies:
+                st.markdown(f"""
+                <div style="background-color: #1e1b18; border-left: 4px solid #ff5a1f; padding: 0.6rem 1rem; border-radius: 4px; margin-bottom: 8px;">
+                    <span style="font-weight: 700; color: #ff6b35;">[{anomaly['period']}]</span> {anomaly['comment']}
+                </div>
+                """, unsafe_allow_html=True)
 
 # Footer
 st.markdown(f"""
