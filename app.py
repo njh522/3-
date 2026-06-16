@@ -8,7 +8,7 @@ from datetime import datetime
 import time
 import prediction_engine
 
-# 페이지 기본 설정 (가로로 넓게 사용)
+# 페이지 기본 설정
 st.set_page_config(
     page_title="[코웨이 영업] 데이터 기반 수요 예측 분석기",
     page_icon="📊",
@@ -16,12 +16,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 데이터베이스 제출용 테이블 초기화
-# 데이터베이스 제출용 테이블 초기화
+# 데이터베이스 테이블 초기화
 def init_db():
     conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
     cursor = conn.cursor()
-    # 1) PSI 예측 최종 승인 제출 이력 테이블
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS submissions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +34,6 @@ def init_db():
             submitted_at TEXT
         )
     """)
-    # 2) 3개년 실제 출하 실적 테이블 (중복 방지를 위한 UNIQUE 인덱스 적용)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS actual_sales (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +46,6 @@ def init_db():
             UNIQUE(item_code, customer, year, month)
         )
     """)
-    # 3) 고객사 계획량 (Forecast) 테이블 (item_code, customer, year, month 복합 기본키 적용)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS customer_fcst (
             item_code TEXT,
@@ -58,6 +54,12 @@ def init_db():
             month INTEGER,
             qty INTEGER,
             PRIMARY KEY(item_code, customer, year, month)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS coway_code_map (
+            coway_code TEXT PRIMARY KEY,
+            powernet_model TEXT
         )
     """)
     conn.commit()
@@ -75,7 +77,7 @@ st.markdown("""
         background-color: rgba(0, 0, 0, 0) !important;
     }
     
-    /* 기본 폰트 및 다크 배경 설정 (삼광 AI 포털 스타일) */
+    /* 기본 폰트 및 다크 배경 설정 */
     html, body, [class*="css"], .stMarkdown {
         font-family: 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'Noto Sans CJK KR', sans-serif !important;
         background-color: #0f172a;
@@ -137,37 +139,6 @@ st.markdown("""
         text-align: center;
         flex-grow: 1;
     }
-    
-    /* 사용 AI 개발 도구 배너 스타일 */
-    .ai-tools-container {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        background: rgba(255, 255, 255, 0.03);
-        padding: 4px 12px;
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    .ai-tools-title {
-        font-size: 0.75rem;
-        color: #94a3b8;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    .ai-tool-badge {
-        font-size: 0.8rem;
-        font-weight: 700;
-        padding: 2px 6px;
-        border-radius: 4px;
-        background: #0f172a;
-        color: #cbd5e1;
-        border: 1px solid #334155;
-    }
-    .badge-claude { border-color: #ea580c; color: #ffedd5; }
-    .badge-cursor { border-color: #3b82f6; color: #dbeafe; }
-    .badge-openai { border-color: #10b981; color: #d1fae5; }
-    .badge-antigravity { border-color: #8b5cf6; color: #f3e8ff; }
     
     /* 섹션 타이틀 */
     .section-title {
@@ -231,84 +202,6 @@ st.markdown("""
         color: #64748b;
         margin-top: 2px;
     }
-    
-    /* AI Insight 요약 영역 스타일 */
-    .insight-card {
-        background-color: #1e293b;
-        border-radius: 10px;
-        padding: 1.2rem;
-        border: 1px solid #334155;
-        height: 100%;
-    }
-    .insight-title {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #ffffff;
-        border-bottom: 1px solid #334155;
-        padding-bottom: 6px;
-        margin-bottom: 10px;
-    }
-    .insight-highlight {
-        font-size: 1.4rem;
-        font-weight: 800;
-        color: #ffffff;
-        margin-bottom: 6px;
-    }
-    .insight-qty {
-        color: #ff5a1f;
-        font-size: 1.6rem;
-    }
-    .insight-reason {
-        font-size: 0.85rem;
-        color: #cbd5e1;
-        line-height: 1.5;
-        background-color: #0f172a;
-        padding: 8px 12px;
-        border-radius: 8px;
-        border-left: 3px solid #38bdf8;
-    }
-    
-    /* 녹색 제출 버튼 스타일 */
-    .submit-container {
-        background-color: #059669;
-        color: #ffffff;
-        padding: 1rem;
-        border-radius: 10px;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        box-shadow: 0 4px 15px rgba(5, 150, 105, 0.3);
-        margin-top: 1rem;
-        border: none;
-        width: 100%;
-        display: block;
-    }
-    .submit-container:hover {
-        background-color: #047857;
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(5, 150, 105, 0.4);
-    }
-    .submit-text {
-        font-size: 1.1rem;
-        font-weight: 800;
-        letter-spacing: 0.5px;
-    }
-    .submit-subtext {
-        font-size: 0.75rem;
-        opacity: 0.9;
-        margin-top: 2px;
-    }
-    
-    /* 풋터 스타일 */
-    .footer-container {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.75rem;
-        color: #475569;
-        margin-top: 1.5rem;
-        padding-top: 0.8rem;
-        border-top: 1px solid #334155;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -316,8 +209,6 @@ st.markdown("""
 @st.cache_data
 def load_all_data(excels_mtime):
     workspace_dir = r"c:\Users\power\OneDrive\바탕 화면\영업팀 실적파일"
-    
-    # 1. DB 연결 및 이전 동기화 mtime, 데이터 수 조회
     conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
     cursor = conn.cursor()
     cursor.execute("CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, val REAL)")
@@ -328,7 +219,6 @@ def load_all_data(excels_mtime):
     cursor.execute("SELECT COUNT(*) FROM actual_sales")
     db_count = cursor.fetchone()[0]
     
-    # 엑셀 파일의 최종 수정시각이 이전과 다르거나 DB가 비어있다면 일괄 적재
     if excels_mtime != last_db_mtime or db_count == 0:
         years = [2023, 2024, 2025, 2026]
         dfs = []
@@ -343,8 +233,6 @@ def load_all_data(excels_mtime):
                 
             try:
                 df = pd.read_excel(file_path, sheet_name=sheet_name, header=None)
-                
-                # 헤더 행 찾기
                 header_idx = None
                 for idx, row in df.iterrows():
                     row_values = [str(x).strip() for x in row.dropna()]
@@ -371,18 +259,13 @@ def load_all_data(excels_mtime):
                     continue
                     
                 df['거래처'] = df['거래처'].ffill()
-                
-                # 1) 모델명이 NaN이거나 빈 문자열인 행 제거
                 df = df[df['모델명'].notna()]
                 df = df[df['모델명'].astype(str).str.strip() != '']
                 
-                # 2) 한글 깨짐 등으로 필터링되지 않는 '소계', '합계' 행을 정밀하게 제거하기 위해, 
-                # 진짜 품목 코드 규격(영숫자, 하이픈, 언더바, 괄호, 슬래시, 공백)만 허용하는 필터 적용
                 import re
                 valid_model_pattern = re.compile(r'^[A-Za-z0-9\-_()/ ]+$')
                 df = df[df['모델명'].astype(str).apply(lambda x: bool(valid_model_pattern.match(x.strip())))]
                 
-                # 거래처명에 대한 기존 필터링 유지 (합계 제거)
                 invalid_keywords = '소계|합계|TOTAL|Total|소 계'
                 df = df[~df['거래처'].astype(str).str.contains(invalid_keywords, na=False)]
                 
@@ -406,11 +289,7 @@ def load_all_data(excels_mtime):
                     elif col.endswith('_금액'):
                         df[col] = df[col] * 1000000
                     
-                if '제품' in df.columns:
-                    df['제품'] = df['제품'].ffill().fillna('미분류')
-                else:
-                    df['제품'] = '미분류'
-                    
+                df['제품'] = df['제품'].ffill().fillna('미분류') if '제품' in df.columns else '미분류'
                 df['연도'] = y
                 
                 target_cols = ['연도', '거래처', '제품', '모델명', '년계_수량', '년계_금액']
@@ -433,15 +312,10 @@ def load_all_data(excels_mtime):
                 
         if dfs:
             df_merged = pd.concat(dfs, ignore_index=True)
-            
-            # 동일 모델명, 거래처, 연도로 중복 행들 합산 집계 (유실 방지)
-            agg_cols = []
-            for m in range(1, 13):
-                agg_cols.extend([f"{m}월_수량", f"{m}월_금액"])
+            agg_cols = [f"{m}월_수량" for m in range(1, 13)] + [f"{m}월_금액" for m in range(1, 13)]
             df_grouped = df_merged.groupby(['모델명', '거래처', '연도'])[agg_cols].sum().reset_index()
             
             cursor.execute("DELETE FROM actual_sales")
-            
             rows_to_insert = []
             for _, row in df_grouped.iterrows():
                 item_code = str(row['모델명']).strip()
@@ -457,13 +331,11 @@ def load_all_data(excels_mtime):
                 VALUES (?, ?, ?, ?, ?, ?)
             """, rows_to_insert)
             
-            # 메타 업데이트
             cursor.execute("INSERT OR REPLACE INTO sync_meta (key, val) VALUES ('last_mtime', ?)", (excels_mtime,))
             conn.commit()
             
     conn.close()
-            
-    # 2. DB에서 데이터 로드하여 피벗 (wide format 재구성)
+    
     conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
     df_long = pd.read_sql_query("SELECT * FROM actual_sales", conn)
     conn.close()
@@ -473,7 +345,6 @@ def load_all_data(excels_mtime):
         
     pivoted_qty = df_long.pivot(index=['item_code', 'customer', 'year'], columns='month', values='qty').fillna(0)
     pivoted_qty.columns = [f"{col}월_수량" for col in pivoted_qty.columns]
-    
     pivoted_amt = df_long.pivot(index=['item_code', 'customer', 'year'], columns='month', values='amount').fillna(0)
     pivoted_amt.columns = [f"{col}월_금액" for col in pivoted_amt.columns]
     
@@ -496,7 +367,7 @@ def load_all_data(excels_mtime):
         
     return df_wide[target_cols]
 
-# 엑셀 파일들의 최종 수정시각 구하기
+# 엑셀 최종 수정 시간 산출
 excels_mtime_val = 0.0
 workspace_dir = r"c:\Users\power\OneDrive\바탕 화면\영업팀 실적파일"
 for y in [2023, 2024, 2025, 2026]:
@@ -511,15 +382,66 @@ if df_raw.empty:
     st.error("❌ 실적 데이터를 불러오지 못했습니다. DB 상태를 확인해 주세요.")
     st.stop()
 
-# 초기 세션 구성 완료
+# ----------------- 코웨이 코드 매핑 데이터 로드 -----------------
+def load_coway_code_map():
+    try:
+        conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
+        cursor = conn.cursor()
+        cursor.execute("CREATE TABLE IF NOT EXISTS coway_code_map (coway_code TEXT PRIMARY KEY, powernet_model TEXT)")
+        cursor.execute("SELECT coway_code, powernet_model FROM coway_code_map")
+        rows = cursor.fetchall()
+        conn.close()
+        return {powernet_model: coway_code for coway_code, powernet_model in rows}
+    except Exception:
+        return {}
 
-# ----------------- AI 예측 사유 생성 유틸리티 -----------------
+# 과거 FCST 정확도/편향 연산 헬퍼
+def calculate_fcst_accuracy(customer, item_code):
+    try:
+        conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
+        df_acc = pd.read_sql_query("""
+            SELECT a.year, a.month, a.qty as actual_qty, f.qty as fcst_qty
+            FROM actual_sales a
+            JOIN customer_fcst f ON a.item_code = f.item_code 
+                                AND a.customer = f.customer 
+                                AND a.year = f.year 
+                                AND a.month = f.month
+            WHERE a.customer = ? AND a.item_code = ?
+            ORDER BY a.year, a.month
+        """, conn, params=(customer, item_code))
+        conn.close()
+        
+        if df_acc.empty:
+            return 0.0, 1.0, pd.DataFrame()
+            
+        df_acc['error'] = (df_acc['actual_qty'] - df_acc['fcst_qty']).abs()
+        df_acc['accuracy'] = df_acc.apply(
+            lambda r: 100.0 * (1.0 - (r['error'] / r['actual_qty'])) if r['actual_qty'] > 0 else (100.0 if r['fcst_qty'] == 0 else 0.0),
+            axis=1
+        )
+        df_acc['accuracy'] = df_acc['accuracy'].clip(lower=0.0, upper=100.0)
+        
+        total_actual = df_acc['actual_qty'].sum()
+        total_error = df_acc['error'].sum()
+        total_fcst = df_acc['fcst_qty'].sum()
+        
+        overall_accuracy = 100.0 * (1.0 - (total_error / total_actual)) if total_actual > 0 else 100.0
+        overall_accuracy = max(0.0, min(100.0, overall_accuracy))
+        
+        bias_ratio = (total_actual / total_fcst) if total_fcst > 0 else 1.0
+        
+        return overall_accuracy, bias_ratio, df_acc
+    except Exception:
+        return 0.0, 1.0, pd.DataFrame()
+
+coway_map = load_coway_code_map()
+
+# AI 예측 사유 생성 유틸리티
 def generate_forecast_reason(m_val, qty, qty_average_val, prev_qty):
     avg_diff = qty - qty_average_val
     avg_diff_pct = (avg_diff / qty_average_val * 100) if qty_average_val > 0 else 0
     mom_diff_pct = ((qty - prev_qty) / prev_qty * 100) if prev_qty > 0 else 0
     
-    # 추세 분석
     trend_txt = ""
     if abs(mom_diff_pct) < 3.0:
         trend_txt = "전월과 유사한 보합세 유지"
@@ -528,7 +450,6 @@ def generate_forecast_reason(m_val, qty, qty_average_val, prev_qty):
     else:
         trend_txt = f"전월 대비 {abs(mom_diff_pct):.1f}% 감소 흐름"
         
-    # 과거 대조 분석
     comparison_txt = ""
     if avg_diff > 0:
         comparison_txt = f"과거 3개년 평균 대비 약 {avg_diff:,.0f}대({avg_diff_pct:+.1f}%) 상회하는 수준"
@@ -537,20 +458,30 @@ def generate_forecast_reason(m_val, qty, qty_average_val, prev_qty):
         
     return f"{trend_txt} 및 {comparison_txt}을 반영한 통계치"
 
-if df_raw.empty:
-    st.error("❌ 실적 데이터를 불러오지 못했습니다. DB 상태를 확인해 주세요.")
-    st.stop()
-
-# 고유한 거래처(업체) 및 품목(모델명) 리스트 추출
+# 고유한 거래처 및 품목 리스트
 customer_list = sorted(df_raw['거래처'].dropna().unique().tolist())
 
-# ----------------- 세션 상태 관리 초기화 -----------------
 if 'customer_select' not in st.session_state:
     st.session_state.customer_select = customer_list[0] if customer_list else ""
 
-# 선택된 거래처에 해당되는 모델명 리스트만 동적으로 추출
 df_cust_only = df_raw[df_raw['거래처'] == st.session_state.customer_select]
 model_list = sorted(df_cust_only['모델명'].dropna().unique().tolist())
+
+# 옵션 텍스트 매핑 딕셔너리 구축 (고객사 코드 연동)
+model_options = []
+model_to_option = {}
+option_to_model = {}
+
+for m in model_list:
+    if st.session_state.customer_select == 'Coway' and m in coway_map:
+        opt_text = f"{m} [{coway_map[m]}]"
+    elif st.session_state.customer_select == 'Coway':
+        opt_text = f"{m} [매핑 필요]"
+    else:
+        opt_text = m
+    model_options.append(opt_text)
+    model_to_option[m] = opt_text
+    option_to_model[opt_text] = m
 
 if 'model_select' not in st.session_state or st.session_state.model_select not in model_list:
     st.session_state.model_select = model_list[0] if model_list else ""
@@ -564,61 +495,48 @@ st.markdown(f"""
 <div class="header-container">
     <div class="logo-text"><span class="logo-power">POWER</span><span class="logo-net">NET</span></div>
     <div class="header-title">[영업팀] 데이터 기반 수요 예측 분석기</div>
-    <div style="width: 150px;"></div> <!-- 대칭 정렬을 위한 빈 공간 -->
+    <div style="width: 150px;"></div>
 </div>
 """, unsafe_allow_html=True)
 
 # ----------------- 데이터 가공 및 예측 엔진 사전 구동 -----------------
-# 1. 선택된 거래처 및 품목의 데이터 추출
 df_item = df_raw[(df_raw['모델명'] == st.session_state.model_select) & (df_raw['거래처'] == st.session_state.customer_select)].copy()
 
-# 2. 과거 5개년 월별 출하 추이 꺾은선 데이터 구성
 def get_yearly_monthly_qty(year_val):
     df_y = df_item[df_item['연도'] == year_val]
     if df_y.empty:
-        # 데이터가 없을 시 품목 모델명 해싱 기준의 일관성 있는 가상 트렌드 생성
         hash_val = sum(ord(c) for c in st.session_state.model_select) % 5
         base_trend = [30000, 35000, 42000, 38000, 32000, 48000, 52000, 45000, 33000, 28000, 35000, 43000]
         multiplier = 0.8 + (year_val - 2021) * 0.07 + (hash_val * 0.05)
         return [int(v * multiplier) for v in base_trend]
-    
     return [int(df_y[f"{m}월_수량"].sum()) for m in range(1, 13)]
 
 qty_2023 = get_yearly_monthly_qty(2023)
 qty_2024 = get_yearly_monthly_qty(2024)
 qty_2025 = get_yearly_monthly_qty(2025)
 
-# 계절성 평균 계산 (2023 ~ 2025 3개년 평균)
 qty_average = []
 for i in range(12):
-    avg_val = (qty_2023[i] + qty_2024[i] + qty_2025[i]) / 3.0
-    qty_average.append(int(avg_val))
+    qty_average.append(int((qty_2023[i] + qty_2024[i] + qty_2025[i]) / 3.0))
 
-# 3. 2026년 실제 데이터 감지 및 AI 예측
-# 사용자가 선택한 예측 기준 월보다 1개월 앞선 월까지를 실제 실적 기입 구간으로 결정
 target_month_int = int(st.session_state.target_month_select.split(".")[1])
 last_actual_month = target_month_int - 1
 
-# Facebook Prophet ML 단일 예측 모델 고정 구동
 df_forecast = prediction_engine.forecast_prophet(df_item, last_actual_month)
 
-# 4. 2026년 실제 + 예측 데이터 구성 (1년치 전체)
 qty_2026 = []
 for m in range(1, 13):
     if m <= last_actual_month:
         df_y = df_item[df_item['연도'] == 2026]
-        qty_val = int(df_y[f"{m}월_수량"].sum()) if not df_y.empty else 0
-        qty_2026.append(qty_val)
+        qty_2026.append(int(df_y[f"{m}월_수량"].sum()) if not df_y.empty else 0)
     else:
         if not df_forecast.empty:
             f_row = df_forecast[df_forecast['월'] == f"{m}월"]
-            qty_val = int(f_row['수량'].values[0]) if not f_row.empty else 0
-            qty_2026.append(qty_val)
+            qty_2026.append(int(f_row['수량'].values[0]) if not f_row.empty else 0)
         else:
             qty_2026.append(qty_average[m - 1])
 
-# ----------------- 2단 Grid Layout 구성 -----------------
-# ----------------- 좌측 사이드바 조건 필터 및 입력 도구 -----------------
+# ----------------- 좌측 사이드바 -----------------
 st.sidebar.markdown("""
 <div style="text-align: center; padding: 10px 0; margin-bottom: 15px; border-bottom: 1px solid #1e293b;">
     <div style="font-size: 1.8rem; font-weight: 800; font-family: 'Outfit';"><span style="color: #ff6b35; font-style: italic;">POWER</span><span style="color: #00b4d8;">NET</span></div>
@@ -628,7 +546,6 @@ st.sidebar.markdown("""
 
 st.sidebar.markdown('<div class="section-title">조회 조건 설정</div>', unsafe_allow_html=True)
 
-# 거래처 (Customer) 드롭다운
 selected_customer = st.sidebar.selectbox(
     "거래처 (Customer)",
     options=customer_list,
@@ -637,100 +554,83 @@ selected_customer = st.sidebar.selectbox(
 )
 if selected_customer != st.session_state.customer_select:
     st.session_state.customer_select = selected_customer
-    # 거래처가 바뀌면 모델 리스트가 달라지므로 새로운 거래처의 첫 번째 모델로 세션을 초기화
     df_cust_only = df_raw[df_raw['거래처'] == selected_customer]
     new_model_list = sorted(df_cust_only['모델명'].dropna().unique().tolist())
     st.session_state.model_select = new_model_list[0] if new_model_list else ""
     st.rerun()
 
-# 품목 코드 드롭다운
-selected_model = st.sidebar.selectbox(
+selected_option = st.sidebar.selectbox(
     "품목 코드 (Item Code)",
-    options=model_list,
-    index=model_list.index(st.session_state.model_select) if st.session_state.model_select in model_list else 0,
+    options=model_options,
+    index=model_options.index(model_to_option[st.session_state.model_select]) if st.session_state.model_select in model_to_option else 0,
     key="model_select_box"
 )
-st.session_state.model_select = selected_model
+st.session_state.model_select = option_to_model[selected_option]
+selected_model = st.session_state.model_select
 
-# 예측 기준 월
-months_options = [f"2026.{m:02d}" for m in range(1, 13)]
 selected_month_str = st.sidebar.selectbox(
     "예측 기준 월 (Target Month)",
-    options=months_options,
-    index=months_options.index(st.session_state.target_month_select) if st.session_state.target_month_select in months_options else 5,
+    options=[f"2026.{m:02d}" for m in range(1, 13)],
+    index=int(st.session_state.target_month_select.split(".")[1]) - 1,
     key="month_select_box"
 )
 st.session_state.target_month_select = selected_month_str
-target_month_int = int(st.session_state.target_month_select.split(".")[1])
+target_month_int = int(selected_month_str.split(".")[1])
 
-# 1) 고객사 FCST 관리 아코디언
-st.sidebar.markdown('<div style="margin-top: 15px;"></div>', unsafe_allow_html=True)
+# 고객사 FCST 관리 아코디언
 with st.sidebar.expander(f"📊 고객사 FCST 계획 관리"):
     st.markdown("**[옵션 B] 엑셀 파일 업로드**")
-    uploaded_fcst_file = st.file_uploader(
-        "FCST 엑셀 업로드",
-        type=["xlsx", "xls"],
-        key="fcst_uploader"
-    )
+    uploaded_fcst_file = st.file_uploader("FCST 엑셀 업로드", type=["xlsx", "xls"], key="fcst_uploader")
     if uploaded_fcst_file is not None:
         try:
             df_up = pd.read_excel(uploaded_fcst_file)
-            model_col = None
-            for col in df_up.columns:
-                if any(x in str(col).lower() for x in ['모델', '품목', 'item', 'code', 'model']):
-                    model_col = col
-                    break
-            if model_col is None:
-                model_col = df_up.columns[0]
-            
-            month_cols = []
-            for col in df_up.columns:
-                col_str = str(col).strip()
-                if any(f"{m}월" in col_str or col_str == str(m) for m in range(1, 13)):
-                    month_cols.append(col)
+            model_col = next((col for col in df_up.columns if any(x in str(col).lower() for x in ['모델', '품목', 'item', 'code', 'model', '코드'])), df_up.columns[0])
+            month_cols = [col for col in df_up.columns if any(f"{m}월" in str(col).strip() or str(col).strip() == str(m) for m in range(1, 13))]
             
             if not month_cols:
-                st.error("❌ '1월', '2월' 등 월별 수량 컬럼을 찾을 수 없습니다.")
+                st.error("❌ 월별 수량 컬럼을 찾을 수 없습니다.")
             else:
                 conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
                 cursor = conn.cursor()
                 inserted_cnt = 0
+                coway_reverse_map = {v: k for k, v in coway_map.items()}
+                
                 for _, row in df_up.iterrows():
                     up_item = str(row[model_col]).strip()
                     if not up_item or up_item.lower() in ['nan', 'total', '합계', '소계']:
                         continue
+                    
+                    target_powernet_model = up_item
+                    if up_item.endswith('.0'):
+                        up_item = up_item.split('.')[0]
+                    if up_item in coway_reverse_map:
+                        target_powernet_model = coway_reverse_map[up_item]
+                        
                     for col in month_cols:
                         col_str = str(col).strip()
-                        m_val = None
-                        for m in range(1, 13):
-                            if f"{m}월" in col_str or col_str == str(m):
-                                m_val = m
-                                break
+                        m_val = next((m for m in range(1, 13) if f"{m}월" in col_str or col_str == str(m)), None)
                         if m_val is None:
                             continue
-                        qty_val = pd.to_numeric(row[col], errors='coerce')
-                        qty_val = int(qty_val) if not pd.isna(qty_val) else 0
+                        qty_val = int(pd.to_numeric(row[col], errors='coerce').fillna(0))
                         
                         cursor.execute("""
                             INSERT OR REPLACE INTO customer_fcst (item_code, customer, year, month, qty)
                             VALUES (?, ?, 2026, ?, ?)
-                        """, (up_item, st.session_state.customer_select, m_val, qty_val))
+                        """, (target_powernet_model, st.session_state.customer_select, m_val, qty_val))
                         inserted_cnt += 1
                 conn.commit()
                 conn.close()
-                st.success(f"✅ 엑셀 FCST 반영 완료 ({inserted_cnt}건)")
+                st.success(f"✅ 반영 완료 ({inserted_cnt}건)")
                 st.rerun()
         except Exception as e:
             st.error(f"❌ 파싱 오류: {e}")
 
-     # 옵션 A
     st.markdown("---")
     st.markdown("**[옵션 A] 직접 수동 기입**")
     manual_vals = {}
     for idx in range(4):
         m_val = (target_month_int + idx - 1) % 12 + 1
-        # 기존 FCST 조회
-        conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
+        conn = sqlite3.connect('sales_forecast.db')
         cursor = conn.cursor()
         cursor.execute("SELECT qty FROM customer_fcst WHERE item_code = ? AND customer = ? AND year = 2026 AND month = ?", 
                        (st.session_state.model_select, st.session_state.customer_select, m_val))
@@ -747,7 +647,7 @@ with st.sidebar.expander(f"📊 고객사 FCST 계획 관리"):
         )
         
     if st.button("FCST 수동 업데이트 💾", use_container_width=True):
-        conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
+        conn = sqlite3.connect('sales_forecast.db')
         cursor = conn.cursor()
         for m_val, qty_val in manual_vals.items():
             cursor.execute("""
@@ -762,59 +662,44 @@ with st.sidebar.expander(f"📊 고객사 FCST 계획 관리"):
 st.sidebar.markdown('<div style="margin-top: 15px;"></div>', unsafe_allow_html=True)
 submit_btn = st.sidebar.button("최종 입력 및 공유 (Submit to PSI) 📤", use_container_width=True, type="primary")
 
+acc_percent, bias_val, df_accuracy_hist = calculate_fcst_accuracy(st.session_state.customer_select, st.session_state.model_select)
+
 if submit_btn:
     try:
-        lme_price = 0.0
-        exchange_rate = 0.0
-        price_change_rate = 0.0
-        profit_rate = 0.0
-        ai_final_recommendation = qty_2026[target_month_int - 1]
-        
-        conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
+        conn = sqlite3.connect('sales_forecast.db')
         cursor = conn.cursor()
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("""
-            INSERT INTO submissions 
-            (item_code, customer, target_month, lme_price, exchange_rate, price_change_rate, operating_profit_rate, ai_recommendation, submitted_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            selected_model,
-            st.session_state.customer_select,
-            selected_month_str,
-            lme_price,
-            exchange_rate,
-            price_change_rate,
-            profit_rate,
-            ai_final_recommendation,
-            now_str
-        ))
+            INSERT INTO submissions (item_code, customer, target_month, lme_price, exchange_rate, price_change_rate, operating_profit_rate, ai_recommendation, submitted_at)
+            VALUES (?, ?, ?, 0.0, 0.0, 0.0, 0.0, ?, ?)
+        """, (selected_model, st.session_state.customer_select, selected_month_str, int(qty_2026[target_month_int - 1]), now_str))
         conn.commit()
         conn.close()
-        st.sidebar.success(f"🎉 **PSI 제출 완료!** ({selected_model})")
+        st.sidebar.success(f"🎉 **PSI 제출 완료!**")
     except Exception as e:
-        st.sidebar.error(f"제출 중 오류가 발생했습니다: {e}")
+        st.sidebar.error(f"제출 오류: {e}")
 
 # ==========================================
-# 2. 메인 영역 렌더링
+# 메인 영역 렌더링
 # ==========================================
-
-# DB에서 고객사 계획량(FCST) 데이터 조회 (상단 KPI용)
-conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
+conn = sqlite3.connect('sales_forecast.db')
 cursor = conn.cursor()
 cursor.execute("SELECT qty FROM customer_fcst WHERE item_code = ? AND customer = ? AND year = 2026 AND month = ?", 
                (st.session_state.model_select, st.session_state.customer_select, target_month_int))
 res_kpi_fcst = cursor.fetchone()
 conn.close()
 kpi_fcst_val = res_kpi_fcst[0] if res_kpi_fcst else int(qty_average[target_month_int - 1] * 0.98)
+adjusted_fcst_val = int(kpi_fcst_val * bias_val)
 
-# 상단 KPI 가로 그리드 카드 영역
+# 상단 KPI 영역
 cols_kpi = st.columns(6)
 with cols_kpi[0]:
+    mapped_code = coway_map.get(st.session_state.model_select, "N/A")
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-label">거래처 (Customer)</div>
+        <div class="kpi-label">거래처 및 고객사 코드</div>
         <div class="kpi-value" style="font-size:1.1rem; color:#2dd4bf; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{st.session_state.customer_select}</div>
-        <div class="kpi-sub">COWAY 영업 전담</div>
+        <div class="kpi-sub">고객코드: {mapped_code}</div>
     </div>
     """, unsafe_allow_html=True)
 with cols_kpi[1]:
@@ -822,7 +707,7 @@ with cols_kpi[1]:
     <div class="kpi-card">
         <div class="kpi-label">품목 코드 (Item Code)</div>
         <div class="kpi-value" style="font-size:0.95rem; color:#3b82f6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="{st.session_state.model_select}">{st.session_state.model_select}</div>
-        <div class="kpi-sub">예측 모델 적용</div>
+        <div class="kpi-sub">당사 자재 품명</div>
     </div>
     """, unsafe_allow_html=True)
 with cols_kpi[2]:
@@ -838,286 +723,261 @@ with cols_kpi[3]:
     <div class="kpi-card">
         <div class="kpi-label">AI 예측 추천량</div>
         <div class="kpi-value" style="color:#ff5a1f;">{qty_2026[target_month_int - 1]:,.0f} 대</div>
-        <div class="kpi-sub">Prophet 시계열 ML</div>
+        <div class="kpi-sub">통계 시계열 ML</div>
     </div>
     """, unsafe_allow_html=True)
 with cols_kpi[4]:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-label">3개년 평균 출하량</div>
-        <div class="kpi-value" style="color:#f59e0b;">{qty_average[target_month_int - 1]:,.0f} 대</div>
-        <div class="kpi-sub">Seasonal Average</div>
+        <div class="kpi-label">FCST 계획량</div>
+        <div class="kpi-value" style="color:#a855f7;">{kpi_fcst_val:,.0f} 대</div>
+        <div class="kpi-sub">고객사 오리지널 계획</div>
     </div>
     """, unsafe_allow_html=True)
 with cols_kpi[5]:
     st.markdown(f"""
-    <div class="kpi-card">
-        <div class="kpi-label">FCST 계획량</div>
-        <div class="kpi-value" style="color:#a855f7;">{kpi_fcst_val:,.0f} 대</div>
-        <div class="kpi-sub">Customer Plan</div>
+    <div class="kpi-card" style="border-color:#10b981; background: rgba(16,185,129,0.03);">
+        <div class="kpi-label" style="color:#34d399;">적중률 보정 예상량</div>
+        <div class="kpi-value" style="color:#34d399;">{adjusted_fcst_val:,.0f} 대</div>
+        <div class="kpi-sub">오차 편향(Bias: {bias_val:+.2f}) 보정</div>
     </div>
     """, unsafe_allow_html=True)
 
 st.markdown('<div style="margin-top: 15px;"></div>', unsafe_allow_html=True)
 
-# 과거 3개년 월별 출하 추이 및 계절성 라인 차트 영역
-st.markdown('<div class="section-title">과거 3개년 월별 출하 추이 및 계절성 (12개월 전체 트렌드)</div>', unsafe_allow_html=True)
+# ----------------- 탭 구성 -----------------
+tab1, tab2 = st.tabs(["📊 AI 수요 예측 분석", "🎯 고객사 FCST 정확도 분석"])
 
-fig_lines = go.Figure()
-display_months = [f"{m}월" for m in range(1, 13)]
-x_axis = display_months
-
-# 시각적 대비가 명확한 연도별 색상 맵핑 (다크 모드 네온 스타일)
-years_style = {
-    "2023년": (qty_2023, "#2dd4bf", 2.0, None), # Teal
-    "2024년": (qty_2024, "#3b82f6", 2.0, None), # Blue
-    "2025년": (qty_2025, "#00b4d8", 2.5, None), # Sky Blue
-    "Seasonal Average": (qty_average, "#a855f7", 2.2, "dash") # Purple dash
-}
-
-for name, (qty_list, color, width, dash_style) in years_style.items():
-    fig_lines.add_trace(go.Scatter(
-        x=x_axis,
-        y=qty_list,
-        name=name,
-        mode='lines',
-        line=dict(color=color, width=width, dash=dash_style),
-        hoverinfo='text+name',
-        hovertext=[f"{q:,.0f}대" for q in qty_list]
-    ))
-
-# Prophet 신뢰구간 시각화 추가 (12월까지 확장)
-if st.session_state.model_type_select == "Prophet 시계열 모델" and not df_forecast.empty and '수량_최소' in df_forecast.columns:
-    start_idx = max(0, last_actual_month - 1)
-    proj_months = display_months[start_idx:]
-    y_lower = []
-    y_upper = []
-    for m_str in proj_months:
-        m_int = int(m_str.replace("월", ""))
-        if m_int <= last_actual_month:
-            df_y = df_item[df_item['연도'] == 2026]
-            val = int(df_y[f"{m_int}월_수량"].sum()) if not df_y.empty else 0
-            y_lower.append(val)
-            y_upper.append(val)
-        else:
-            f_row = df_forecast[df_forecast['월'] == m_str]
-            y_lower.append(int(f_row['수량_최소'].values[0]) if not f_row.empty else 0)
-            y_upper.append(int(f_row['수량_최대'].values[0]) if not f_row.empty else 0)
+with tab1:
+    st.markdown('<div class="section-title">과거 3개년 월별 출하 추이 및 계절성 (12개월 전체 트렌드)</div>', unsafe_allow_html=True)
     
-    fig_lines.add_trace(go.Scatter(
-        x=proj_months + proj_months[::-1],
-        y=y_upper + y_lower[::-1],
-        fill='toself',
-        fillcolor='rgba(255, 90, 31, 0.08)',
-        line=dict(color='rgba(255, 90, 31, 0)'),
-        hoverinfo="skip",
-        showlegend=True,
-        name="AI 예측 신뢰구간"
-    ))
-
-# 2026년 실제 및 예측 라인 12월까지 연장
-if last_actual_month > 0:
-    fig_lines.add_trace(go.Scatter(
-        x=x_axis[:last_actual_month],
-        y=qty_2026[:last_actual_month],
-        name="2026년 실제 실적",
-        mode='lines+markers',
-        line=dict(color="#ff5a1f", width=4.0),
-        marker=dict(size=7),
-        hoverinfo='text+name',
-        hovertext=[f"{q:,.0f}대" for q in qty_2026[:last_actual_month]]
-    ))
-
-if last_actual_month < 12:
-    start_idx = max(0, last_actual_month - 1)
-    fig_lines.add_trace(go.Scatter(
-        x=x_axis[start_idx:12],
-        y=qty_2026[start_idx:12],
-        name="2026년 AI 예측",
-        mode='lines',
-        line=dict(color="#ff5a1f", width=4.0, dash="dash"),
-        hoverinfo='text+name',
-        hovertext=[f"{q:,.0f}대" for q in qty_2026[start_idx:12]]
-    ))
-
-# 예측 기준 월 세로선 및 포인트 하이라이트 추가
-if 1 <= target_month_int <= 12:
-    target_month_idx = target_month_int - 1
-    target_month_name = f"{target_month_int}월"
+    fig_lines = go.Figure()
+    display_months = [f"{m}월" for m in range(1, 13)]
     
-    max_y_limit = max(max(qty_2025), max(qty_2026)) if qty_2026 else max(qty_2025)
-    fig_lines.add_shape(
-        type="line",
-        x0=target_month_name, y0=0,
-        x1=target_month_name, y1=max_y_limit * 1.2,
-        line=dict(color="rgba(255, 255, 255, 0.2)", width=1.5, dash="dot")
-    )
+    years_style = {
+        "2023년": (qty_2023, "#2dd4bf", 2.0, None),
+        "2024년": (qty_2024, "#3b82f6", 2.0, None),
+        "2025년": (qty_2025, "#00b4d8", 2.5, None),
+        "Seasonal Average": (qty_average, "#a855f7", 2.2, "dash")
+    }
     
-    month_eng_names = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"]
-    target_month_eng = month_eng_names[target_month_idx]
-    
-    highlight_years = ["2025년", "Seasonal Average"]
-    for name in highlight_years:
-        val_list, col, _, _ = years_style[name]
-        y_val = val_list[target_month_idx]
-        
+    for name, (qty_list, color, width, dash_style) in years_style.items():
         fig_lines.add_trace(go.Scatter(
-            x=[target_month_name],
-            y=[y_val],
-            mode='markers+text',
-            marker=dict(color=col, size=10, line=dict(color='#0c1020', width=2)),
-            text=[target_month_eng],
-            textposition="top center" if name == "2025년" else "bottom center",
-            textfont=dict(family="Outfit", size=11, color="#cbd5e1"),
-            showlegend=False
+            x=display_months,
+            y=qty_list,
+            name=name,
+            mode='lines',
+            line=dict(color=color, width=width, dash=dash_style),
+            hoverinfo='text+name',
+            hovertext=[f"{q:,.0f}대" for q in qty_list]
         ))
         
-fig_lines.update_layout(
-    margin=dict(l=40, r=20, t=10, b=30),
-    height=280,
-    plot_bgcolor="rgba(0,0,0,0)",
-    paper_bgcolor="rgba(0,0,0,0)",
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="center",
-        x=0.5,
-        font=dict(size=10, color="#cbd5e1")
-    ),
-    xaxis=dict(
-        showgrid=True,
-        gridcolor="rgba(255,255,255,0.05)",
-        tickfont=dict(size=11, color="#94a3b8")
-    ),
-    yaxis=dict(
-        showgrid=True,
-        gridcolor="rgba(255,255,255,0.05)",
-        range=[0, max_y_limit * 1.15],
-        tickfont=dict(size=11, color="#94a3b8")
+    if st.session_state.model_type_select == "Prophet 시계열 모델" and not df_forecast.empty and '수량_최소' in df_forecast.columns:
+        start_idx = max(0, last_actual_month - 1)
+        proj_months = display_months[start_idx:]
+        y_lower = []
+        y_upper = []
+        for m_str in proj_months:
+            m_int = int(m_str.replace("월", ""))
+            if m_int <= last_actual_month:
+                df_y = df_item[df_item['연도'] == 2026]
+                val = int(df_y[f"{m_int}월_수량"].sum()) if not df_y.empty else 0
+                y_lower.append(val)
+                y_upper.append(val)
+            else:
+                f_row = df_forecast[df_forecast['월'] == m_str]
+                y_lower.append(int(f_row['수량_최소'].values[0]) if not f_row.empty else 0)
+                y_upper.append(int(f_row['수량_최대'].values[0]) if not f_row.empty else 0)
+        
+        fig_lines.add_trace(go.Scatter(
+            x=proj_months + proj_months[::-1],
+            y=y_upper + y_lower[::-1],
+            fill='toself',
+            fillcolor='rgba(255, 90, 31, 0.08)',
+            line=dict(color='rgba(255, 90, 31, 0)'),
+            hoverinfo="skip",
+            showlegend=True,
+            name="AI 예측 신뢰구간"
+        ))
+        
+    if last_actual_month > 0:
+        fig_lines.add_trace(go.Scatter(
+            x=display_months[:last_actual_month],
+            y=qty_2026[:last_actual_month],
+            name="2026년 실제 실적",
+            mode='lines+markers',
+            line=dict(color="#ff5a1f", width=4.0),
+            marker=dict(size=7),
+            hoverinfo='text+name',
+            hovertext=[f"{q:,.0f}대" for q in qty_2026[:last_actual_month]]
+        ))
+        
+    if last_actual_month < 12:
+        start_idx = max(0, last_actual_month - 1)
+        fig_lines.add_trace(go.Scatter(
+            x=display_months[start_idx:12],
+            y=qty_2026[start_idx:12],
+            name="2026년 AI 예측",
+            mode='lines',
+            line=dict(color="#ff5a1f", width=4.0, dash="dash"),
+            hoverinfo='text+name',
+            hovertext=[f"{q:,.0f}대" for q in qty_2026[start_idx:12]]
+        ))
+        
+    max_y_limit = max(max(qty_2025), max(qty_2026)) if qty_2026 else max(qty_2025)
+    fig_lines.update_layout(
+        margin=dict(l=40, r=20, t=10, b=30),
+        height=280,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10, color="#cbd5e1")),
+        xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(size=11, color="#94a3b8")),
+        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", range=[0, max_y_limit * 1.15], tickfont=dict(size=11, color="#94a3b8"))
     )
-)
-
-st.plotly_chart(fig_lines, use_container_width=True, config={'displayModeBar': False})
-
-# 하단 영역 2개 열로 분할
-col_bot_left, col_bot_right = st.columns([1.8, 2.2])
-
-with col_bot_left:
-    st.markdown('<div class="section-title">당월 포함 미래 4개월 예측 요약</div>', unsafe_allow_html=True)
+    st.plotly_chart(fig_lines, use_container_width=True, config={'displayModeBar': False})
     
-    four_months_data = []
-    for i in range(4):
-        m_val = (target_month_int + i - 1) % 12 + 1
-        m_name = f"{m_val}월"
-        qty = qty_2026[m_val - 1]
-        
-        prev_m_val = (m_val - 2) % 12 + 1
-        prev_qty = qty_2026[prev_m_val - 1]
-        if prev_qty > 0:
-            change_pct = ((qty - prev_qty) / prev_qty) * 100
-        else:
-            change_pct = 0.0
+    col_bot_left, col_bot_right = st.columns([1.8, 2.2])
+    with col_bot_left:
+        st.markdown('<div class="section-title">당월 포함 미래 4개월 예측 요약</div>', unsafe_allow_html=True)
+        four_months_data = []
+        for i in range(4):
+            m_val = (target_month_int + i - 1) % 12 + 1
+            qty = qty_2026[m_val - 1]
+            prev_m_val = (m_val - 2) % 12 + 1
+            prev_qty = qty_2026[prev_m_val - 1]
+            change_pct = ((qty - prev_qty) / prev_qty * 100) if prev_qty > 0 else 0.0
+            four_months_data.append({'월': f"{m_val}월", '추천량': qty, '변동률': change_pct})
             
-        four_months_data.append({
-            '월': m_name,
-            '추천량': qty,
-            '변동률': change_pct
-        })
+        cols_metric = st.columns(4)
+        for idx, data in enumerate(four_months_data):
+            with cols_metric[idx]:
+                border_color = "#ff5a1f" if idx == 0 else "#1e293b"
+                bg_color = "#1e1e38" if idx == 0 else "#151b2d"
+                change_sign = "+" if data['변동률'] >= 0 else ""
+                change_color = "#f43f5e" if data['변동률'] >= 0 else "#3b82f6"
+                
+                st.markdown(f"""
+                <div style="background-color: {bg_color}; border: 1.5px solid {border_color}; border-radius: 12px; padding: 0.8rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); text-align: center;">
+                    <div style="font-size: 0.85rem; font-weight: 700; color: #94a3b8;">{data['월']} AI 추천량</div>
+                    <div style="font-size: 1.4rem; font-weight: 800; color: #ffffff; margin: 6px 0;">{data['추천량']:,.0f}<span style="font-size: 0.8rem; font-weight: 500; color: #94a3b8;"> 대</span></div>
+                    <div style="font-size: 0.8rem; font-weight: 700; color: {change_color};">전월비 {change_sign}{data['변동률']:.1f}%</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+        st.markdown('<div style="margin-top: 12px; background-color: #111827; border: 1px solid #1e293b; border-radius: 10px; padding: 0.8rem 1.2rem; box-shadow: 0 2px 6px rgba(0,0,0,0.15); margin-bottom: 15px;"><div style="font-size: 0.9rem; font-weight: 700; color: #00b4d8; margin-bottom: 8px;">📋 월별 AI 수요 예측 근거 및 판단 사유</div>', unsafe_allow_html=True)
+        for idx, data in enumerate(four_months_data):
+            m_val = int(data['월'].replace("월", ""))
+            qty = data['추천량']
+            avg_qty = qty_average[m_val - 1]
+            prev_m = (m_val - 2) % 12 + 1
+            prev_qty = qty_2026[prev_m - 1]
+            reason_text = generate_forecast_reason(m_val, qty, avg_qty, prev_qty)
+            st.markdown(f'<div style="font-size: 0.82rem; color: #cbd5e1; margin-bottom: 5px; line-height: 1.4;"><strong style="color: #00b4d8;">• {data['월']} 예측 사유</strong>: {reason_text}</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         
-    cols_metric = st.columns(4)
-    for idx, data in enumerate(four_months_data):
-        with cols_metric[idx]:
-            border_color = "#ff5a1f" if idx == 0 else "#1e293b"
-            bg_color = "#1e1e38" if idx == 0 else "#151b2d"
+    with col_bot_right:
+        st.markdown('<div class="section-title">수요 예측 종합 PSI 대조 테이블</div>', unsafe_allow_html=True)
+        col_names = [f"{data['월']}" for data in four_months_data]
+        labels = ['AI 최종 추천량 (대)', '과거 3개년 평균 출하량 (대)', '직전 연도(2025년) 동월 실적 (대)', 'Forecast 계획량 (대)']
+        row_ai, row_avg, row_2025, row_forecast = [], [], [], []
+        
+        conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
+        cursor = conn.cursor()
+        target_months = [(target_month_int + i - 1) % 12 + 1 for i in range(4)]
+        placeholders = ",".join("?" for _ in target_months)
+        cursor.execute(f"SELECT month, qty FROM customer_fcst WHERE item_code = ? AND customer = ? AND year = 2026 AND month IN ({placeholders})", 
+                       [st.session_state.model_select, st.session_state.customer_select] + target_months)
+        fcst_results = dict(cursor.fetchall())
+        conn.close()
+        
+        for i in range(4):
+            m_val = (target_month_int + i - 1) % 12 + 1
+            row_ai.append(f"{qty_2026[m_val - 1]:,.0f}")
+            row_avg.append(f"{qty_average[m_val - 1]:,.0f}")
+            row_2025.append(f"{qty_2025[m_val - 1]:,.0f}")
+            db_fcst_qty = fcst_results.get(m_val)
+            row_forecast.append(f"{db_fcst_qty:,.0f}" if db_fcst_qty is not None else f"{int(qty_average[m_val - 1] * 0.98):,.0f}")
             
-            change_sign = "+" if data['변동률'] >= 0 else ""
-            change_color = "#f43f5e" if data['변동률'] >= 0 else "#3b82f6"
+        df_psi = pd.DataFrame([row_ai, row_avg, row_2025, row_forecast], columns=col_names, index=labels)
+        st.dataframe(df_psi, use_container_width=True)
+        st.markdown('<div style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; line-height: 1.4;">* 담당자께서는 AI의 정량적 통계 예측치와 과거 패턴/직전 실적 데이터를 비교하여 정성적 영업 조율(감)을 최종 반영하실 수 있습니다.</div>', unsafe_allow_html=True)
+
+with tab2:
+    st.markdown('<div class="section-title">고객사 계획(FCST) 정확도 및 오차 추이 분석</div>', unsafe_allow_html=True)
+    
+    if df_accuracy_hist.empty:
+        st.info("💡 선택된 거래처/품목 조합에 대한 과거 FCST 실적 대조 데이터가 없습니다. (과거 FCST 데이터 적재 필요)")
+    else:
+        cols_metric_acc = st.columns(3)
+        with cols_metric_acc[0]:
+            st.metric("과거 누적 적중률 (Accuracy)", f"{acc_percent:.1f} %")
+        with cols_metric_acc[1]:
+            bias_percent = (bias_val - 1.0) * 100
+            bias_text = f"{bias_percent:+.1f}% 과소 예측" if bias_percent >= 0 else f"{abs(bias_percent):.1f}% 과대 예측"
+            st.metric("예측 편향 (Bias)", f"{bias_val:.2f}배", bias_text)
+        with cols_metric_acc[2]:
+            st.metric("대조 데이터 개수", f"{len(df_accuracy_hist)} 개월분")
             
-            st.markdown(f"""
-            <div style="background-color: {bg_color}; border: 1.5px solid {border_color}; border-radius: 12px; padding: 0.8rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); text-align: center;">
-                <div style="font-size: 0.85rem; font-weight: 700; color: #94a3b8;">{data['월']} AI 추천량</div>
-                <div style="font-size: 1.4rem; font-weight: 800; color: #ffffff; margin: 6px 0;">{data['추천량']:,.0f}<span style="font-size: 0.8rem; font-weight: 500; color: #94a3b8;"> 대</span></div>
-                <div style="font-size: 0.8rem; font-weight: 700; color: {change_color};">전월비 {change_sign}{data['변동률']:.1f}%</div>
-            </div>
-            """, unsafe_allow_html=True)
+        fig_acc_bar = go.Figure()
+        df_accuracy_hist['기간'] = df_accuracy_hist.apply(lambda r: f"{int(r['year'])}.{int(r['month']):02d}", axis=1)
+        
+        fig_acc_bar.add_trace(go.Bar(
+            x=df_accuracy_hist['기간'],
+            y=df_accuracy_hist['actual_qty'],
+            name='실제 출하 실적',
+            marker_color='#10b981',
+            opacity=0.8
+        ))
+        
+        fig_acc_bar.add_trace(go.Bar(
+            x=df_accuracy_hist['기간'],
+            y=df_accuracy_hist['fcst_qty'],
+            name='고객사 계획 (FCST)',
+            marker_color='#a855f7',
+            opacity=0.8
+        ))
+        
+        fig_acc_bar.add_trace(go.Scatter(
+            x=df_accuracy_hist['기간'],
+            y=df_accuracy_hist['accuracy'],
+            name='월별 적중률 (%)',
+            mode='lines+markers',
+            line=dict(color='#ff5a1f', width=3),
+            yaxis='y2'
+        ))
+        
+        fig_acc_bar.update_layout(
+            margin=dict(l=40, r=40, t=20, b=30),
+            height=300,
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center"),
+            xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#cbd5e1")),
+            yaxis=dict(title="수량 (대)", showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#cbd5e1")),
+            yaxis2=dict(
+                title="적중률 (%)",
+                overlaying='y',
+                side='right',
+                range=[0, 105],
+                tickfont=dict(color="#ff5a1f")
+            )
+        )
+        st.plotly_chart(fig_acc_bar, use_container_width=True)
+        
+        st.markdown("**과거 매칭 상세 데이터 내역**")
+        df_acc_show = df_accuracy_hist[['year', 'month', 'fcst_qty', 'actual_qty', 'error', 'accuracy']].copy()
+        df_acc_show.columns = ['연도', '월', '고객사 FCST(대)', '실제 판매량(대)', '절대 오차(대)', '적중률(%)']
+        st.dataframe(df_acc_show.style.format({
+            '고객사 FCST(대)': '{:,.0f}',
+            '실제 판매량(대)': '{:,.0f}',
+            '절대 오차(대)': '{:,.0f}',
+            '적중률(%)': '{:.1f}%'
+        }), use_container_width=True)
 
-    # 4개월 예측 사유
-    st.markdown("""
-    <div style="margin-top: 12px; background-color: #111827; border: 1px solid #1e293b; border-radius: 10px; padding: 0.8rem 1.2rem; box-shadow: 0 2px 6px rgba(0,0,0,0.15); margin-bottom: 15px;">
-        <div style="font-size: 0.9rem; font-weight: 700; color: #00b4d8; margin-bottom: 8px;">
-            📋 월별 AI 수요 예측 근거 및 판단 사유
-        </div>
-    """, unsafe_allow_html=True)
-    
-    for idx, data in enumerate(four_months_data):
-        m_val = int(data['월'].replace("월", ""))
-        qty = data['추천량']
-        avg_qty = qty_average[m_val - 1]
-        prev_m = (m_val - 2) % 12 + 1
-        prev_qty = qty_2026[prev_m - 1]
-        
-        reason_text = generate_forecast_reason(m_val, qty, avg_qty, prev_qty)
-        
-        st.markdown(f"""
-        <div style="font-size: 0.82rem; color: #cbd5e1; margin-bottom: 5px; line-height: 1.4;">
-            <strong style="color: #00b4d8;">• {data['월']} 예측 사유</strong>: {reason_text}
-        </div>
-        """, unsafe_allow_html=True)
-        
-    st.markdown("</div>", unsafe_allow_html=True)
-
-with col_bot_right:
-    st.markdown('<div class="section-title">수요 예측 종합 PSI 대조 테이블</div>', unsafe_allow_html=True)
-    
-    col_names = [f"{data['월']}" for data in four_months_data]
-    labels = ['AI 최종 추천량 (대)', '과거 3개년 평균 출하량 (대)', '직전 연도(2025년) 동월 실적 (대)', f'Forecast 계획량 (대)']
-    
-    row_ai = []
-    row_avg = []
-    row_2025 = []
-    row_forecast = []
-    
-    # DB에서 고객사 계획량(FCST) 데이터 조회
-    conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
-    cursor = conn.cursor()
-    target_months = []
-    for i in range(4):
-        m_val = (target_month_int + i - 1) % 12 + 1
-        target_months.append(m_val)
-    placeholders = ",".join("?" for _ in target_months)
-    cursor.execute(f"SELECT month, qty FROM customer_fcst WHERE item_code = ? AND customer = ? AND year = 2026 AND month IN ({placeholders})", 
-                   [st.session_state.model_select, st.session_state.customer_select] + target_months)
-    fcst_results = dict(cursor.fetchall())
-    conn.close()
-    
-    for i in range(4):
-        m_val = (target_month_int + i - 1) % 12 + 1
-        row_ai.append(f"{qty_2026[m_val - 1]:,.0f}")
-        row_avg.append(f"{qty_average[m_val - 1]:,.0f}")
-        row_2025.append(f"{qty_2025[m_val - 1]:,.0f}")
-        
-        db_fcst_qty = fcst_results.get(m_val)
-        if db_fcst_qty is not None:
-            row_forecast.append(f"{db_fcst_qty:,.0f}")
-        else:
-            row_forecast.append(f"{int(qty_average[m_val - 1] * 0.98):,.0f}")
-        
-    df_psi = pd.DataFrame([row_ai, row_avg, row_2025, row_forecast], columns=col_names, index=labels)
-    
-    st.dataframe(df_psi, use_container_width=True)
-    
-    st.markdown("""
-    <div style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; line-height: 1.4;">
-        * 담당자께서는 AI의 정량적 통계 예측치와 과거 패턴/직전 실적 데이터를 비교하여 정성적 영업 조율(감)을 최종 반영하실 수 있습니다.
-    </div>
-    """, unsafe_allow_html=True)
-
-# ----------------- 하단 영역 (Footer) -----------------
+# Footer
 st.markdown(f"""
 <div class="footer-container">
-    <div>Data Updated: 2026-05-27</div>
-    <div>System Status: Operational</div>
-    <div>Branding: Powernet & Antigravity Powered</div>
+    <div>Data Updated: 2026-06-16</div>
+    <div>System Status: Normal (Seasonal Index Fallback Enabled)</div>
 </div>
 """, unsafe_allow_html=True)
