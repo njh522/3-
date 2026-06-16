@@ -473,10 +473,8 @@ model_to_option = {}
 option_to_model = {}
 
 for m in model_list:
-    if st.session_state.customer_select == 'Coway' and m in coway_map:
+    if st.session_state.customer_select == 'Coway' and m in coway_map and len(str(coway_map[m]).strip()) == 7:
         opt_text = f"{m} [{coway_map[m]}]"
-    elif st.session_state.customer_select == 'Coway':
-        opt_text = f"{m} [매핑 필요]"
     else:
         opt_text = m
     model_options.append(opt_text)
@@ -694,7 +692,9 @@ adjusted_fcst_val = int(kpi_fcst_val * bias_val)
 # 상단 KPI 영역
 cols_kpi = st.columns(6)
 with cols_kpi[0]:
-    mapped_code = coway_map.get(st.session_state.model_select, "N/A")
+    mapped_code = coway_map.get(st.session_state.model_select, "")
+    if len(str(mapped_code).strip()) != 7:
+        mapped_code = ""
     st.markdown(f"""
     <div class="kpi-card">
         <div class="kpi-label">거래처 및 고객사 코드</div>
