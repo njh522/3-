@@ -213,6 +213,14 @@ st.markdown("""
         color: #64748b;
         margin-top: 2px;
     }
+    
+    /* st.metric 값 및 라벨 가독성 개선 (다크모드 최적화) */
+    [data-testid="stMetricValue"] {
+        color: #f8fafc !important;
+    }
+    [data-testid="stMetricLabel"] {
+        color: #94a3b8 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1243,7 +1251,7 @@ with tab2:
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)",
             legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center"),
-            xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#cbd5e1")),
+            xaxis=dict(type='category', showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#cbd5e1")),
             yaxis=dict(title="수량 (대)", showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#cbd5e1")),
             yaxis2=dict(
                 title="적중률 (%)",
