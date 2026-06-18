@@ -576,6 +576,49 @@ def generate_forecast_reason(m_val, qty, qty_average_val, prev_qty):
         
     return f"{trend_txt} 및 {comparison_txt}을 반영한 통계치"
 
+def generate_scm_diagnostic_report(customer, model_name, cv_val, vol_class, risk_lvl, is_seasonal, acc_percent, bias_val, qty_2026, target_month_int):
+    # 1. 변동성 분석 및 리스크 진단
+    if risk_lvl == "위험":
+        vol_desc = f"이 모델은 과거 출하 변동성(CV: <strong style='color:#ef4444;'>{cv_val:.2f}</strong>)이 매우 높은 <strong>고변동성 위험 품목</strong>입니다. 수요의 급등락 패턴이 매우 강하므로, 단순 고객사 FCST 계획이나 AI 예측치만 믿고 자재를 구매할 경우 심각한 <strong>재고 과적재</strong> 또는 갑작스러운 <strong>공급 부족(결품) 손실</strong>이 발생할 수 있습니다."
+    elif risk_lvl == "보통":
+        vol_desc = f"이 모델은 과거 출하 변동성(CV: <strong style='color:#fbbf24;'>{cv_val:.2f}</strong>)이 보통 수준인 품목입니다. 일반적인 예측 오차 범위 내에서 수요가 발생하므로, 표준 안전재고 관리 규칙을 준수하는 것이 권장됩니다."
+    else:
+        vol_desc = f"이 모델은 과거 출하 변동성(CV: <strong style='color:#34d399;'>{cv_val:.2f}</strong>)이 낮고 출하 흐름이 일정한 <strong>수요 변동성 안정 품목</strong>입니다. 비교적 안전하게 자재 조달 계획을 수립할 수 있습니다."
+        
+    # 2. 계절성 분석
+    if is_seasonal:
+        seasonal_desc = "또한 과거 출하 이력상 특정 계절에 수요가 쏠리는 <strong>계절성 패턴(Seasonal Pattern)</strong>이 뚜렷하게 관찰되므로, 연간 평균치보다는 시기별 가중치를 고려한 유연한 자재 확보 전략이 필수적입니다."
+    else:
+        seasonal_desc = "특별한 계절적 쏠림 현상은 관찰되지 않으며, 연간 일관성 있는 출하 흐름을 유지하고 있습니다."
+    
+    # 3. 정확도 및 예측 편향 분석
+    if acc_percent > 0:
+        acc_desc = f"과거 계획 적중률(Accuracy)은 <strong style='color:#38bdf8;'>{acc_percent:.1f}%</strong> 수준입니다."
+        bias_pct = (bias_val - 1.0) * 100
+        if bias_val > 1.05:
+            bias_desc = f" 특히 실제 출하량이 계획 대비 약 <strong style='color:#ef4444;'>{bias_pct:+.1f}%</strong> 더 많은 <strong>과소 예측(Bias: {bias_val:.2f}배)</strong> 성향이 관찰되므로, 납기 지연을 예방하기 위해 선제적으로 자재 버퍼를 확보해야 합니다."
+        elif bias_val < 0.95:
+            bias_desc = f" 특히 실제 출하량이 계획 대비 약 <strong style='color:#fbbf24;'>{abs(bias_pct):.1f}%</strong> 더 적은 <strong>과대 예측(Bias: {bias_val:.2f}배)</strong> 성향이 반복되므로, 불필요한 자재 선구매를 억제하여 악성 재고 과적재 리스크를 사전에 방지해야 합니다."
+        else:
+            bias_desc = " 예측 편향(Bias)이 비교적 중립적으로 안정되어 있어, 계획의 과대/과소 왜곡 우려가 낮습니다."
+        acc_bias_summary = acc_desc + bias_desc
+    else:
+        acc_bias_summary = "과거 오차 대조 이력이 존재하지 않아 신규 데이터 축적이 필요합니다."
+        
+    # 4. 종합 SCM 실행 가이드
+    next_month_qty = qty_2026[target_month_int - 1]
+    guide_desc = f"다가오는 <strong>{target_month_int}월</strong> 생산 준비 시, 단순 고객사 계획량 대신 과거 오차 편향과 D-2 리드타임을 고려하여 자동 산출된 하단의 <strong>'최종 자재 준비 권장량'</strong> 수치를 우선적으로 반영하여 SCM 결품 및 재고 리스크를 선제적으로 방어하십시오."
+    
+    report = f"""
+    <ul style="margin: 0; padding-left: 1.2rem; list-style-type: disc;">
+        <li style="margin-bottom: 6px;"><strong>수요 변동성 및 리스크:</strong> {vol_desc}</li>
+        <li style="margin-bottom: 6px;"><strong>계절성 특징:</strong> {seasonal_desc}</li>
+        <li style="margin-bottom: 6px;"><strong>과거 예측 신뢰도:</strong> {acc_bias_summary}</li>
+        <li style="margin-bottom: 2px;"><strong>실무 권장 실행 방안:</strong> {guide_desc}</li>
+    </ul>
+    """
+    return report
+
 # 고유한 거래처 및 품목 리스트
 customer_list = sorted(df_raw['거래처'].dropna().unique().tolist())
 
@@ -681,7 +724,10 @@ selected_option = st.sidebar.selectbox(
     index=model_options.index(model_to_option[st.session_state.model_select]) if st.session_state.model_select in model_to_option else 0,
     key="model_select_box"
 )
-st.session_state.model_select = option_to_model[selected_option]
+new_model = option_to_model[selected_option]
+if new_model != st.session_state.model_select:
+    st.session_state.model_select = new_model
+    st.rerun()
 selected_model = st.session_state.model_select
 
 selected_month_str = st.sidebar.selectbox(
@@ -843,6 +889,31 @@ elif is_seasonal_flag:
     st.info(f"📈 **계절성 패턴 지배 품목**: 이 모델은 과거 계절별 출하 특징이 뚜렷한 **안정적 계절성({vol_class})** 품목입니다. 시기별 가중치 흐름에 맞춰 조율하는 것이 효율적입니다.")
 else:
     st.success(f"✅ **수요 변동성 안정 품목**: 이 모델은 출하 패턴 및 계획 변동폭이 안정적인 수준(**{vol_class}**)으로 유지되고 있습니다. 비교적 안전하게 자재 조달 계획을 수립할 수 있습니다.")
+
+# AI 종합 진단 요약 카드 추가
+diagnostic_report = generate_scm_diagnostic_report(
+    st.session_state.customer_select,
+    st.session_state.model_select,
+    cv_val,
+    vol_class,
+    risk_lvl,
+    is_seasonal_flag,
+    acc_percent,
+    bias_val,
+    qty_2026,
+    target_month_int
+)
+
+st.markdown(f"""
+<div style="background-color: #111827; border: 1.5px solid #ff5a1f; border-radius: 12px; padding: 1.2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.25); margin-bottom: 20px;">
+    <div style="font-size: 1.05rem; font-weight: 800; color: #ff6b35; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+        🤖 AI 예측 및 SCM 종합 진단 요약 리포트 (모델별 동적 분석)
+    </div>
+    <div style="font-size: 0.88rem; color: #e2e8f0; line-height: 1.6;">
+        {diagnostic_report}
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ----------------- 탭 구성 -----------------
 tab1, tab2 = st.tabs(["📊 AI 수요 예측 분석", "🎯 고객사 FCST 정확도 분석"])
