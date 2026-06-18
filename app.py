@@ -904,13 +904,15 @@ diagnostic_report = generate_scm_diagnostic_report(
     target_month_int
 )
 
+diagnostic_report_clean = diagnostic_report.replace('\n', ' ').strip()
+
 st.markdown(f"""
 <div style="background-color: #111827; border: 1.5px solid #ff5a1f; border-radius: 12px; padding: 1.2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.25); margin-bottom: 20px;">
     <div style="font-size: 1.05rem; font-weight: 800; color: #ff6b35; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
         🤖 AI 예측 및 SCM 종합 진단 요약 리포트 (모델별 동적 분석)
     </div>
     <div style="font-size: 0.88rem; color: #e2e8f0; line-height: 1.6;">
-        {diagnostic_report}
+        {diagnostic_report_clean}
     </div>
 </div>
 """, unsafe_allow_html=True)
