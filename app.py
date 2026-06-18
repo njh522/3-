@@ -416,9 +416,9 @@ def load_coway_code_map():
         return {}
 
 # 과거 FCST 정확도/편향 연산 헬퍼
-def calculate_fcst_accuracy(customer, item_code):
+def calculate_fcst_accuracy(customer, item_code, last_actual_month):
     try:
-        conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
+        # 2026년의 경우 실제 실적이 마운트된 last_actual_month 이하까지만 대조 범위로 지정합니다.
         df_acc = pd.read_sql_query("""
             SELECT a.year, a.month, a.qty as actual_qty, f.qty as fcst_qty
             FROM actual_sales a
@@ -427,8 +427,9 @@ def calculate_fcst_accuracy(customer, item_code):
                                 AND a.year = f.year 
                                 AND a.month = f.month
             WHERE a.customer = ? AND a.item_code = ?
+              AND (a.year < 2026 OR (a.year = 2026 AND a.month <= ?))
             ORDER BY a.year, a.month
-        """, conn, params=(customer, item_code))
+        """, conn, params=(customer, item_code, last_actual_month))
         conn.close()
         
         if df_acc.empty:
@@ -845,7 +846,7 @@ with st.sidebar.expander(f"📊 고객사 FCST 계획 관리"):
 st.sidebar.markdown('<div style="margin-top: 15px;"></div>', unsafe_allow_html=True)
 submit_btn = st.sidebar.button("최종 입력 및 공유 (Submit to PSI) 📤", use_container_width=True, type="primary")
 
-acc_percent, bias_val, df_accuracy_hist = calculate_fcst_accuracy(st.session_state.customer_select, st.session_state.model_select)
+acc_percent, bias_val, df_accuracy_hist = calculate_fcst_accuracy(st.session_state.customer_select, st.session_state.model_select, last_actual_month)
 
 if submit_btn:
     try:
@@ -1195,28 +1196,107 @@ with tab2:
         </div>
         """, unsafe_allow_html=True)
             
+        # 과거 12개월 ~ 미래 4개월 기간 목록 생성 (총 16개월)
+        plot_periods = []
+        import datetime
+        from dateutil.relativedelta import relativedelta
+        
+        base_date = datetime.date(2026, target_month_int, 1)
+        start_date = base_date - relativedelta(months=12) # 지난 1년 (과거 12개월)
+        
+        for i in range(16):
+            cur_date = start_date + relativedelta(months=i)
+            plot_periods.append((cur_date.year, cur_date.month))
+            
+        # 해당 기간의 실제 실적 및 계획 수량 조회
+        conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
+        cursor = conn.cursor()
+        
+        # 1. 실제 실적 조회 (단, 2026년의 경우 last_actual_month 이하만 실제 실적으로 인정)
+        actual_data = {}
+        for y, m in plot_periods:
+            if y < 2026 or (y == 2026 and m <= last_actual_month):
+                cursor.execute("""
+                    SELECT qty FROM actual_sales 
+                    WHERE customer = ? AND item_code = ? AND year = ? AND month = ?
+                """, (st.session_state.customer_select, st.session_state.model_select, y, m))
+                res = cursor.fetchone()
+                if res:
+                    actual_data[(y, m)] = res[0]
+            
+        # 2. 고객사 계획 조회 (실제 DB에 있는 계획 수량만 조회)
+        fcst_data = {}
+        for y, m in plot_periods:
+            cursor.execute("""
+                SELECT qty FROM customer_fcst 
+                WHERE customer = ? AND item_code = ? AND year = ? AND month = ?
+            """, (st.session_state.customer_select, st.session_state.model_select, y, m))
+            res = cursor.fetchone()
+            if res:
+                fcst_data[(y, m)] = res[0]
+                
+        conn.close()
+        
+        plot_rows = []
+        for y, m in plot_periods:
+            act_qty = actual_data.get((y, m), None)
+            fcst_qty = fcst_data.get((y, m), None)
+            
+            # 적중률 계산 (실제 실적과 계획이 모두 존재할 때만 계산)
+            if act_qty is not None and fcst_qty is not None and act_qty > 0:
+                err = abs(act_qty - fcst_qty)
+                acc = 100.0 * (1.0 - (err / act_qty))
+                acc = max(0.0, min(100.0, acc))
+            elif act_qty is not None and fcst_qty is not None and act_qty == 0:
+                acc = 100.0 if fcst_qty == 0 else 0.0
+            else:
+                acc = None
+                
+            plot_rows.append({
+                'year': y,
+                'month': m,
+                'actual_qty': act_qty,
+                'fcst_qty': fcst_qty,
+                'accuracy': acc,
+                '기간': f"{y}.{m:02d}"
+            })
+            
+        df_plot_hist = pd.DataFrame(plot_rows)
+
         fig_acc_bar = go.Figure()
-        df_accuracy_hist['기간'] = df_accuracy_hist.apply(lambda r: f"{int(r['year'])}.{int(r['month']):02d}", axis=1)
         
         # 호버 툴팁 정보 가독성 높게 커스텀 정의
         hover_texts_actual = []
         hover_texts_fcst = []
-        for _, row in df_accuracy_hist.iterrows():
+        for _, row in df_plot_hist.iterrows():
             period = f"{int(row['year'])}년 {int(row['month'])}월"
-            act = int(row['actual_qty'])
-            fcst = int(row['fcst_qty'])
-            err = abs(act - fcst)
+            act = row['actual_qty']
+            fcst = row['fcst_qty']
             acc = row['accuracy']
             
-            tooltip_act = f"<b>[{period}] 실제 출하 실적</b><br>실제 출하: {act:,.0f} 대<br>고객사 계획: {fcst:,.0f} 대<br>계획 오차: {err:,.0f} 대<br>월간 적중률: {acc:.1f}%"
-            tooltip_fcst = f"<b>[{period}] 고객사 계획 (FCST)</b><br>고객사 계획: {fcst:,.0f} 대<br>실제 출하: {act:,.0f} 대<br>계획 오차: {err:,.0f} 대<br>월간 적중률: {acc:.1f}%"
+            if act is not None:
+                act_str = f"{int(act):,d} 대"
+            else:
+                act_str = "미집계 (미래)"
+                
+            if fcst is not None:
+                fcst_str = f"{int(fcst):,d} 대"
+                err_str = f"{abs(int(act or 0) - int(fcst)):,d} 대" if act is not None else "미확정"
+            else:
+                fcst_str = "계획 없음"
+                err_str = "미확정"
+                
+            acc_str = f"{acc:.1f}%" if acc is not None else "미계산"
+            
+            tooltip_act = f"<b>[{period}] 실제 출하 실적</b><br>실제 출하: {act_str}<br>고객사 계획: {fcst_str}<br>계획 오차: {err_str}<br>월간 적중률: {acc_str}"
+            tooltip_fcst = f"<b>[{period}] 고객사 계획 (FCST)</b><br>고객사 계획: {fcst_str}<br>실제 출하: {act_str}<br>계획 오차: {err_str}<br>월간 적중률: {acc_str}"
             
             hover_texts_actual.append(tooltip_act)
             hover_texts_fcst.append(tooltip_fcst)
             
         fig_acc_bar.add_trace(go.Bar(
-            x=df_accuracy_hist['기간'],
-            y=df_accuracy_hist['actual_qty'],
+            x=df_plot_hist['기간'],
+            y=df_plot_hist['actual_qty'],
             name='실제 출하 실적',
             marker_color='#10b981',
             opacity=0.8,
@@ -1225,8 +1305,8 @@ with tab2:
         ))
         
         fig_acc_bar.add_trace(go.Bar(
-            x=df_accuracy_hist['기간'],
-            y=df_accuracy_hist['fcst_qty'],
+            x=df_plot_hist['기간'],
+            y=df_plot_hist['fcst_qty'],
             name='고객사 계획 (FCST)',
             marker_color='#a855f7',
             opacity=0.8,
@@ -1235,13 +1315,13 @@ with tab2:
         ))
         
         fig_acc_bar.add_trace(go.Scatter(
-            x=df_accuracy_hist['기간'],
-            y=df_accuracy_hist['accuracy'],
+            x=df_plot_hist['기간'],
+            y=df_plot_hist['accuracy'],
             name='월별 적중률 (%)',
             mode='lines+markers',
             line=dict(color='#ff5a1f', width=3),
             yaxis='y2',
-            hovertext=[f"<b>[{r['기간']}] 월별 적중률</b><br>적중률: {r['accuracy']:.1f}%" for _, r in df_accuracy_hist.iterrows()],
+            hovertext=[f"<b>[{r['기간']}] 월별 적중률</b><br>적중률: {r['accuracy']:.1f}%" if r['accuracy'] is not None else f"<b>[{r['기간']}] 월별 적중률</b><br>적중률: 미계산" for _, r in df_plot_hist.iterrows()],
             hoverinfo='text'
         ))
         
