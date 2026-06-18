@@ -1062,9 +1062,9 @@ with tab1:
         height=280,
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10, color="#cbd5e1")),
-        xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=11, color="#94a3b8")),
-        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.04)", range=[0, max_y_limit * 1.15], tickfont=dict(size=11, color="#94a3b8"))
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10, color="#f1f5f9")),
+        xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)", tickfont=dict(size=11, color="#cbd5e1")),
+        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)", range=[0, max_y_limit * 1.15], tickfont=dict(size=11, color="#cbd5e1"))
     )
     st.plotly_chart(fig_lines, use_container_width=True, config={'displayModeBar': False})
     
@@ -1246,15 +1246,20 @@ with tab2:
         ))
         
         fig_acc_bar.update_layout(
-            margin=dict(l=40, r=40, t=20, b=30),
+            margin=dict(l=40, r=40, t=20, b=35),
             height=300,
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)",
-            legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center"),
-            xaxis=dict(type='category', showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#cbd5e1")),
-            yaxis=dict(title="수량 (대)", showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#cbd5e1")),
+            legend=dict(orientation="h", y=1.15, x=0.5, xanchor="center", font=dict(color="#f1f5f9", size=10)),
+            xaxis=dict(type='category', showgrid=True, gridcolor="rgba(255,255,255,0.08)", tickfont=dict(color="#cbd5e1")),
+            yaxis=dict(
+                title=dict(text="수량 (대)", font=dict(color="#f1f5f9", size=11)),
+                showgrid=True, 
+                gridcolor="rgba(255,255,255,0.08)", 
+                tickfont=dict(color="#cbd5e1")
+            ),
             yaxis2=dict(
-                title="적중률 (%)",
+                title=dict(text="적중률 (%)", font=dict(color="#ff5a1f", size=11)),
                 overlaying='y',
                 side='right',
                 range=[0, 105],
