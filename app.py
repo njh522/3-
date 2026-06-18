@@ -515,11 +515,9 @@ def calculate_4month_procurement_guide(customer, item_code, target_month_int, bi
     else:
         std_error = np.mean(qty_average) * 0.15 if qty_average else 1000.0
         
-    # D-2일 리드타임 적용 안전재고 공식: 1.65 (95% 신뢰 수준) * 표준 오차 * sqrt(2일 / 30일)
+    # 안전재고 공식: 1.65 (95% 서비스 수준) * 표준 오차
     safety_factor = 1.65
-    lead_time_days = 2.0
-    days_in_month = 30.0
-    safety_stock = safety_factor * std_error * math.sqrt(lead_time_days / days_in_month)
+    safety_stock = safety_factor * std_error
     safety_stock = max(0, int(safety_stock))
     
     guide_list = []
@@ -607,7 +605,7 @@ def generate_scm_diagnostic_report(customer, model_name, cv_val, vol_class, risk
         
     # 4. 종합 SCM 실행 가이드
     next_month_qty = qty_2026[target_month_int - 1]
-    guide_desc = f"다가오는 <strong>{target_month_int}월</strong> 생산 준비 시, 단순 고객사 계획량 대신 과거 오차 편향과 D-2 리드타임을 고려하여 자동 산출된 하단의 <strong>'최종 자재 준비 권장량'</strong> 수치를 우선적으로 반영하여 SCM 결품 및 재고 리스크를 선제적으로 방어하십시오."
+    guide_desc = f"다가오는 <strong>{target_month_int}월</strong> 생산 준비 시, 단순 고객사 계획량 대신 과거 오차 편향을 고려하여 자동 산출된 하단의 <strong>'최종 자재 준비 권장량'</strong> 수치를 우선적으로 반영하여 SCM 결품 및 재고 리스크를 선제적으로 방어하십시오."
     
     report = f"""
     <ul style="margin: 0; padding-left: 1.2rem; list-style-type: disc;">
@@ -1106,10 +1104,10 @@ with tab1:
             
         df_guide_show = pd.DataFrame(
             guide_rows, 
-            columns=['대상 월', '고객사 FCST 계획', '오차 편향 보정 수량', '안전 재고 (D-2 리드타임 적용)', '★ 최종 자재 준비 권장량 (KIT 구매)']
+            columns=['대상 월', '고객사 FCST 계획', '오차 편향 보정 수량', '안전 재고', '★ 최종 자재 준비 권장량 (KIT 구매)']
         )
         st.dataframe(df_guide_show, use_container_width=True)
-        st.markdown('<div style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; line-height: 1.4;">* <strong>안전 재고 공식</strong>: 과거 오차 분산 및 코웨이 납품 시차(D-2일 리드타임)를 고려한 통계적 안전재고량(95% 서비스율)입니다.<br>* <strong>최종 자재 준비 권장량</strong>: 단순 FCST 계획에 과거 과대/과소 예측 편향(Bias)을 조정한 후, 안전재고를 가산하여 자재 조달 과부족 리스크를 예방하기 위한 최적의 의사결정 수치입니다.</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size: 0.8rem; color: #94a3b8; margin-top: -5px; line-height: 1.4;">* <strong>안전 재고 공식</strong>: 과거 오차 분산을 고려하여 산출한 통계적 안전재고량(95% 서비스율)입니다.<br>* <strong>최종 자재 준비 권장량</strong>: 단순 FCST 계획에 과거 과대/과소 예측 편향(Bias)을 조정한 후, 안전재고를 가산하여 자재 조달 과부족 리스크를 예방하기 위한 최적의 의사결정 수치입니다.</div>', unsafe_allow_html=True)
 
 with tab2:
     st.markdown('<div class="section-title">고객사 계획(FCST) 정확도 및 오차 추이 분석</div>', unsafe_allow_html=True)
