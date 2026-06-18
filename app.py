@@ -628,6 +628,39 @@ def generate_scm_diagnostic_report(customer, model_name, cv_val, vol_class, risk
     """
     return report
 
+def generate_customer_fcst_diagnostics(acc_percent, bias_val):
+    if acc_percent <= 0:
+        return "<div style='font-size: 0.88rem; color: #cbd5e1;'>과거 실적 대조 데이터가 없어 종합 진단을 생성할 수 없습니다.</div>"
+        
+    bias_pct = (bias_val - 1.0) * 100
+    
+    # 1. 계획 신뢰도 등급
+    if acc_percent >= 85.0:
+        grade = "<strong style='color:#34d399;'>우수 (High Trust)</strong>"
+        grade_desc = "고객사의 계획 신뢰도가 매우 높습니다. 공급망 단절 위험이 낮으므로 고객사 계획 수량을 적극 활용하여 생산 및 조달을 진행해도 안전합니다."
+    elif acc_percent >= 70.0:
+        grade = "<strong style='color:#fbbf24;'>보통 (Moderate Trust)</strong>"
+        grade_desc = "고객사 계획이 일정한 오차를 내포하고 있으나 수용 가능한 수준입니다. 안전재고 버퍼를 소량 유지하며 조율하는 것이 효율적입니다."
+    else:
+        grade = "<strong style='color:#ef4444;'>주의 (Low Trust)</strong>"
+        grade_desc = "고객사 계획의 계획 왜곡(채찍효과) 리스크가 높은 편입니다. 단순 FCST 수치에 의존한 자재 구매는 재고 과적재 또는 결품을 초래할 수 있으니 하단의 보정 계획을 필히 대조하십시오."
+        
+    # 2. 예측 편향(Bias) 버릇 분석
+    if bias_val > 1.05:
+        bias_desc = f"습관적으로 <strong>실제 수요보다 적게 계획하는 과소 예측(Under-forecasting, Bias {bias_val:.2f}배)</strong> 성향이 관찰됩니다. (실제 출하량이 계획 대비 평균 <span style='color:#ef4444;'>{bias_pct:+.1f}%</span> 더 많음) 납기 지연을 방지하기 위해 선제적으로 자재 버퍼를 확보해야 합니다."
+    elif bias_val < 0.95:
+        bias_desc = f"습관적으로 <strong>실제 수요보다 부풀려 계획하는 과대 예측(Over-forecasting, Bias {bias_val:.2f}배)</strong> 성향이 반복됩니다. (실제 출하량이 계획 대비 <span style='color:#fbbf24;'>{abs(bias_pct):.1f}%</span> 미달) 불필요한 자재 선구매를 억제하여 재고 회전율을 조율하십시오."
+    else:
+        bias_desc = "과거 예측 편향이 중립적(Bias 중립)으로 매우 양호합니다. 고의적인 계획 왜곡 리스크가 매우 낮습니다."
+        
+    diagnostic_html = f"""
+    <ul style="margin: 0; padding-left: 1.2rem; list-style-type: disc;">
+        <li style="margin-bottom: 6px;"><strong>계획 신뢰 등급:</strong> {grade} - {grade_desc}</li>
+        <li style="margin-bottom: 2px;"><strong>예측 편향 특징:</strong> {bias_desc}</li>
+    </ul>
+    """
+    return diagnostic_html
+
 # 고유한 거래처 및 품목 리스트
 customer_list = sorted(df_raw['거래처'].dropna().unique().tolist())
 
@@ -939,13 +972,13 @@ with tab1:
     fig_lines = go.Figure()
     display_months = [f"{m}월" for m in range(1, 13)]
     
-    # 과거 실적선들은 투명도가 있는 슬레이트 그레이 색상으로 강조를 줄이고,
-    # 2023년, 2024년은 기본값으로 보이지 않게(visible="legendonly") 설정하여 초기 노이즈를 최소화합니다.
+    # 모든 과거 실적선이 기본적으로 켜져서 보이도록(True) 설정하고,
+    # 연도별 구분이 쉽도록 프리미엄 다크 테마에 맞는 색상 조합(파스텔 그레이/블루/그린/보라)을 지정합니다.
     years_style = {
-        "2023년 실적": (qty_2023, "rgba(148, 163, 184, 0.35)", 1.2, None, "legendonly"),
-        "2024년 실적": (qty_2024, "rgba(148, 163, 184, 0.5)", 1.2, None, "legendonly"),
-        "2025년 실적": (qty_2025, "rgba(148, 163, 184, 0.85)", 1.5, None, True),
-        "3개년 평균 출하": (qty_average, "rgba(168, 85, 247, 0.65)", 1.5, "dash", True)
+        "2023년 실적": (qty_2023, "#94a3b8", 1.5, "dot", True),
+        "2024년 실적": (qty_2024, "#38bdf8", 1.5, "dash", True),
+        "2025년 실적": (qty_2025, "#34d399", 2.0, None, True),
+        "3개년 평균 출하": (qty_average, "#a855f7", 2.0, "dash", True)
     }
     
     for name, (qty_list, color, width, dash_style, visibility) in years_style.items():
@@ -1140,15 +1173,47 @@ with tab2:
         with cols_metric_acc[2]:
             st.metric("대조 데이터 개수", f"{len(df_accuracy_hist)} 개월분")
             
+        # 고객사 FCST 계획 신뢰도 종합 진단 패널 추가
+        fcst_diagnostic_html = generate_customer_fcst_diagnostics(acc_percent, bias_val)
+        fcst_diagnostic_clean = fcst_diagnostic_html.replace('\n', ' ').strip()
+        st.markdown(f"""
+        <div style="background-color: #111827; border: 1.5px solid #a855f7; border-radius: 12px; padding: 1.2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.25); margin-bottom: 20px; margin-top: 15px;">
+            <div style="font-size: 1.05rem; font-weight: 800; color: #c084fc; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                🎯 고객사 Forecast 계획 신뢰도 종합 진단 (실무 가이드)
+            </div>
+            <div style="font-size: 0.88rem; color: #e2e8f0; line-height: 1.6;">
+                {fcst_diagnostic_clean}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+            
         fig_acc_bar = go.Figure()
         df_accuracy_hist['기간'] = df_accuracy_hist.apply(lambda r: f"{int(r['year'])}.{int(r['month']):02d}", axis=1)
         
+        # 호버 툴팁 정보 가독성 높게 커스텀 정의
+        hover_texts_actual = []
+        hover_texts_fcst = []
+        for _, row in df_accuracy_hist.iterrows():
+            period = f"{int(row['year'])}년 {int(row['month'])}월"
+            act = int(row['actual_qty'])
+            fcst = int(row['fcst_qty'])
+            err = abs(act - fcst)
+            acc = row['accuracy']
+            
+            tooltip_act = f"<b>[{period}] 실제 출하 실적</b><br>실제 출하: {act:,.0f} 대<br>고객사 계획: {fcst:,.0f} 대<br>계획 오차: {err:,.0f} 대<br>월간 적중률: {acc:.1f}%"
+            tooltip_fcst = f"<b>[{period}] 고객사 계획 (FCST)</b><br>고객사 계획: {fcst:,.0f} 대<br>실제 출하: {act:,.0f} 대<br>계획 오차: {err:,.0f} 대<br>월간 적중률: {acc:.1f}%"
+            
+            hover_texts_actual.append(tooltip_act)
+            hover_texts_fcst.append(tooltip_fcst)
+            
         fig_acc_bar.add_trace(go.Bar(
             x=df_accuracy_hist['기간'],
             y=df_accuracy_hist['actual_qty'],
             name='실제 출하 실적',
             marker_color='#10b981',
-            opacity=0.8
+            opacity=0.8,
+            hovertext=hover_texts_actual,
+            hoverinfo='text'
         ))
         
         fig_acc_bar.add_trace(go.Bar(
@@ -1156,7 +1221,9 @@ with tab2:
             y=df_accuracy_hist['fcst_qty'],
             name='고객사 계획 (FCST)',
             marker_color='#a855f7',
-            opacity=0.8
+            opacity=0.8,
+            hovertext=hover_texts_fcst,
+            hoverinfo='text'
         ))
         
         fig_acc_bar.add_trace(go.Scatter(
@@ -1165,7 +1232,9 @@ with tab2:
             name='월별 적중률 (%)',
             mode='lines+markers',
             line=dict(color='#ff5a1f', width=3),
-            yaxis='y2'
+            yaxis='y2',
+            hovertext=[f"<b>[{r['기간']}] 월별 적중률</b><br>적중률: {r['accuracy']:.1f}%" for _, r in df_accuracy_hist.iterrows()],
+            hoverinfo='text'
         ))
         
         fig_acc_bar.update_layout(
