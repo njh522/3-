@@ -7,6 +7,17 @@ import sqlite3
 from datetime import datetime
 import time
 import prediction_engine
+import base64
+
+# 파워넷 로고 이미지 로드 및 base64 인코딩
+logo_b64 = ""
+try:
+    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "powernet_logo.png")
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            logo_b64 = base64.b64encode(f.read()).decode("utf-8")
+except Exception:
+    pass
 
 # 페이지 기본 설정
 st.set_page_config(
@@ -648,9 +659,11 @@ if 'model_type_select' not in st.session_state:
     st.session_state.model_type_select = "Prophet 시계열 모델"
 
 # ----------------- 커스텀 헤더 렌더링 -----------------
+logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="height: 30px; vertical-align: middle;" alt="POWERNET">' if logo_b64 else '<span class="logo-power">POWER</span><span class="logo-net">NET</span>'
+
 st.markdown(f"""
 <div class="header-container">
-    <div class="logo-text"><span class="logo-power">POWER</span><span class="logo-net">NET</span></div>
+    <div class="logo-text">{logo_html}</div>
     <div class="header-title">[영업팀] 데이터 기반 수요 예측 분석기</div>
     <div style="width: 150px;"></div>
 </div>
@@ -694,9 +707,11 @@ for m in range(1, 13):
             qty_2026.append(qty_average[m - 1])
 
 # ----------------- 좌측 사이드바 -----------------
-st.sidebar.markdown("""
+sidebar_logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="height: 35px; margin-bottom: 8px;" alt="POWERNET">' if logo_b64 else '<span style="color: #ff6b35; font-style: italic;">POWER</span><span style="color: #00b4d8;">NET</span>'
+
+st.sidebar.markdown(f"""
 <div style="text-align: center; padding: 10px 0; margin-bottom: 15px; border-bottom: 1px solid #1e293b;">
-    <div style="font-size: 1.8rem; font-weight: 800; font-family: 'Outfit';"><span style="color: #ff6b35; font-style: italic;">POWER</span><span style="color: #00b4d8;">NET</span></div>
+    <div style="font-size: 1.8rem; font-weight: 800; font-family: 'Outfit';">{sidebar_logo_html}</div>
     <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">AI-AX Portal Dashboard</div>
 </div>
 """, unsafe_allow_html=True)
