@@ -388,7 +388,8 @@ def load_coway_code_map():
         conn = sqlite3.connect('sales_forecast.db', timeout=20.0)
         cursor = conn.cursor()
         cursor.execute("CREATE TABLE IF NOT EXISTS coway_code_map (coway_code TEXT PRIMARY KEY, powernet_model TEXT)")
-        cursor.execute("SELECT coway_code, powernet_model FROM coway_code_map")
+        # 양산 물동량을 추적하기 위해 1로 시작하고 7자리인 코웨이 코드(양산코드)만 필터링하여 매칭합니다.
+        cursor.execute("SELECT coway_code, powernet_model FROM coway_code_map WHERE coway_code LIKE '1%' AND length(coway_code) = 7")
         rows = cursor.fetchall()
         conn.close()
         return {powernet_model: coway_code for coway_code, powernet_model in rows}
