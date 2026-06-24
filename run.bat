@@ -8,5 +8,5 @@ echo.
 echo Streamlit 대시보드 서버를 시작합니다...
 echo 브라우저 창이 자동으로 열리지 않으면 http://localhost:8501 에 접속해 주세요.
 echo.
-streamlit run app.py
+python -m streamlit run app.py
 pause

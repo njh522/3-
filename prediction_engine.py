@@ -103,9 +103,10 @@ def forecast_seasonal_index(df_all, target_cols, last_actual_month):
         
     return pd.DataFrame(results)
 
-def forecast_prophet(df_all, last_actual_month):
+def forecast_prophet(df_all, last_actual_month, df_market=None):
     """
-    Facebook Prophet 시계열 모델을 학습시켜 2026년 말까지 물량을 예측합니다.
+    Facebook Prophet 시계열 모델에 외부 시장 지표(미세먼지, 환율) 및 코웨이 프로모션 플래그를 연계시켜
+    2026년 말까지 물량을 다중 회귀 모델(Add Regressors)로 예측합니다.
     (오류 발생 시 계절성 지수 기반 예측 모델로 안전하게 대체 구동합니다)
     """
     try:
@@ -134,21 +135,67 @@ def forecast_prophet(df_all, last_actual_month):
             # 데이터가 너무 적으면 Prophet 학습이 안 되므로 빈 DataFrame 리턴
             return pd.DataFrame()
             
+        # 시장 지표 병합 처리
+        has_regressors = False
+        if df_market is not None and not df_market.empty:
+            # ds 컬럼을 datetime64 형식으로 정렬하여 병합
+            df_market['ds'] = pd.to_datetime(df_market['ds'])
+            df_ts = df_ts.merge(df_market, on='ds', how='left')
+            # 결측치는 전방/후방 채우기
+            df_ts['pm25_dust'] = df_ts['pm25_dust'].ffill().bfill().fillna(20.0)
+            df_ts['exchange_rate'] = df_ts['exchange_rate'].ffill().bfill().fillna(1350.0)
+            df_ts['coway_promo'] = df_ts['coway_promo'].ffill().bfill().fillna(0.0)
+            has_regressors = True
+            
         # 2. 수량(Quantity) 예측 모델 학습 및 예측
         df_qty = df_ts[['ds', 'qty']].rename(columns={'qty': 'y'})
+        if has_regressors:
+            df_qty['pm25_dust'] = df_ts['pm25_dust']
+            df_qty['exchange_rate'] = df_ts['exchange_rate']
+            df_qty['coway_promo'] = df_ts['coway_promo']
+            
         m_qty = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
+        if has_regressors:
+            m_qty.add_regressor('pm25_dust')
+            m_qty.add_regressor('exchange_rate')
+            m_qty.add_regressor('coway_promo')
+            
         m_qty.fit(df_qty)
         
         # 2026년 12월 말까지의 월 단위 날짜 생성
         future_qty = m_qty.make_future_dataframe(periods=12 - last_actual_month, freq='MS')
+        if has_regressors:
+            future_qty['ds'] = pd.to_datetime(future_qty['ds'])
+            future_qty = future_qty.merge(df_market[['ds', 'pm25_dust', 'exchange_rate', 'coway_promo']], on='ds', how='left')
+            future_qty['pm25_dust'] = future_qty['pm25_dust'].ffill().bfill().fillna(20.0)
+            future_qty['exchange_rate'] = future_qty['exchange_rate'].ffill().bfill().fillna(1350.0)
+            future_qty['coway_promo'] = future_qty['coway_promo'].ffill().bfill().fillna(0.0)
+            
         forecast_qty = m_qty.predict(future_qty)
         
         # 3. 금액(Amount) 예측 모델 학습 및 예측
         df_amt = df_ts[['ds', 'amt']].rename(columns={'amt': 'y'})
+        if has_regressors:
+            df_amt['pm25_dust'] = df_ts['pm25_dust']
+            df_amt['exchange_rate'] = df_ts['exchange_rate']
+            df_amt['coway_promo'] = df_ts['coway_promo']
+            
         m_amt = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
+        if has_regressors:
+            m_amt.add_regressor('pm25_dust')
+            m_amt.add_regressor('exchange_rate')
+            m_amt.add_regressor('coway_promo')
+            
         m_amt.fit(df_amt)
         
         future_amt = m_amt.make_future_dataframe(periods=12 - last_actual_month, freq='MS')
+        if has_regressors:
+            future_amt['ds'] = pd.to_datetime(future_amt['ds'])
+            future_amt = future_amt.merge(df_market[['ds', 'pm25_dust', 'exchange_rate', 'coway_promo']], on='ds', how='left')
+            future_amt['pm25_dust'] = future_amt['pm25_dust'].ffill().bfill().fillna(20.0)
+            future_amt['exchange_rate'] = future_amt['exchange_rate'].ffill().bfill().fillna(1350.0)
+            future_amt['coway_promo'] = future_amt['coway_promo'].ffill().bfill().fillna(0.0)
+            
         forecast_amt = m_amt.predict(future_amt)
         
         # 4. 결과 병합 및 가공
