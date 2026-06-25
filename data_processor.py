@@ -136,7 +136,7 @@ def load_and_merge_data(base_dir):
     
     return sales_df
 
-def check_volatility(recent_12m_df):
+def check_volatility(recent_12m_df, full_past_df=None):
     if len(recent_12m_df) < 3:
         return "데이터부족", 0, "판단불가"
     
@@ -144,6 +144,16 @@ def check_volatility(recent_12m_df):
     std_qty = recent_12m_df['y'].std()
     
     if mean_qty == 0:
+        if full_past_df is not None and not full_past_df.empty:
+            # 최근 12개월 이전의 실적 데이터 확인
+            cutoff_date = recent_12m_df['ds'].min()
+            prior_df = full_past_df[full_past_df['ds'] < cutoff_date]
+            if not prior_df.empty:
+                prior_mean = prior_df['y'].mean()
+                prior_max = prior_df['y'].max()
+                # 과거에 월평균 100개 이상 출하되었거나 한 번이라도 500개 이상 출하되었는데 최근 12개월간 출하가 0인 경우 단종으로 분류
+                if prior_mean >= 100 or prior_max >= 500:
+                    return "단종", 0, "과거 출하 실적이 존재하나 최근 12개월간 실적이 없어 단종 모델로 분류"
         return "출하중단(0)", 0, "휴면"
         
     cv = std_qty / mean_qty
@@ -204,7 +214,7 @@ def analyze_models(sales_df, current_date=None):
         last_12_months = past_m_df.tail(12)
         
         # Volatility (긴급 오더 오차)
-        vol_grade, cv, vol_action = check_volatility(last_12_months)
+        vol_grade, cv, vol_action = check_volatility(last_12_months, past_m_df)
         
         # Seasonality (성수기 파악)
         peak_season = detect_seasonality(past_m_df)
@@ -275,7 +285,7 @@ def forecast_single_pair(row, sales_grouped, current_date, target_months):
         logging.getLogger('cmdstanpy').setLevel(logging.ERROR)
         
         m = Prophet(yearly_seasonality=True, daily_seasonality=False, weekly_seasonality=False, uncertainty_samples=0)
-        m.add_country_holidays(country_name='KR')
+        # m.add_country_holidays(country_name='KR') # 월별 데이터에서는 일별 공휴일 매핑 시 심각한 연산 지연이 발생하므로 비활성화
         m.fit(past_m_df)
         
         future = m.make_future_dataframe(periods=4, freq='MS')
@@ -327,7 +337,7 @@ def generate_rolling_4m_forecast(sales_df, current_date=None):
     # pairs의 각 행을 딕셔너리로 변환하여 피클링 안정성 확보
     rows_list = [row.to_dict() for _, row in pairs.iterrows()]
     
-    max_workers = min(32, os.cpu_count() or 4)
+    max_workers = min(4, os.cpu_count() or 2)
     
     worker_func = partial(forecast_single_pair, 
                           sales_grouped=sales_grouped, 
@@ -335,9 +345,11 @@ def generate_rolling_4m_forecast(sales_df, current_date=None):
                           target_months=target_months)
                           
     if sys.platform == 'win32':
-        print(f"Windows 환경 감지: ThreadPoolExecutor로 예측 연산 가동 (작업자 수 {max_workers})...")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = list(executor.map(worker_func, rows_list))
+        print("Windows 환경 감지: 교착 상태 방지를 위해 순차 예측 연산을 수행합니다...")
+        results = []
+        for i, row in enumerate(rows_list):
+            print(f" -> AI 예측 연산 진행 중... ({i+1}/{len(rows_list)}): {row.get('model', '')}")
+            results.append(worker_func(row))
     else:
         print(f"Prophet 병렬 예측 연산 가동 (ProcessPoolExecutor, 작업자 수 {max_workers})")
         with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:

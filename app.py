@@ -11,7 +11,7 @@ import sys
 import os
 
 # 1. 앱 제목 및 페이지 설정
-st.set_page_config(page_title="생산판매회의 AI 롤링 대시보드", layout="wide", page_icon="🏭", initial_sidebar_state="expanded")
+st.set_page_config(page_title="영업팀 판매량 예측기", layout="wide", page_icon="🏭", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
@@ -35,7 +35,7 @@ h1, h2, h3 { color: #F8F9FA; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📈 영업팀 물동량 예측기: Rolling Forecast (V5.0)")
+st.title("📈 영업팀 판매량 예측기: Rolling Forecast (V5.0)")
 st.markdown("<p style='color:#A0AEC0; font-size:1.1rem;'>과거 3개년의 출하 실적 분석과 고객사 Forecast를 결합하여 최종 수요 계획을 수립함으로써 예측의 신뢰도를 극대화합니다.<br>데이터 기반의 체계적인 AI 분석으로 미래 물동량을 전망하여 영업담당자의 소극적인 물량 반영을 보완하고, 공급 부족(결품) 리스크 최소화 및 과재고 방지를 동시에 달성하는 의사결정 지원 플랫폼입니다.</p>", unsafe_allow_html=True)
 
 base_dir = r"C:\Users\power\OneDrive\바탕 화면\영업팀 실적파일"
@@ -119,8 +119,8 @@ tab1, tab2, tab3 = st.tabs([
 
 # 1. 생판회의용
 with tab1:
-    st.subheader("🎯 M ~ M+3 Rolling Forecast & 실재고 연동 조달 계획")
-    st.markdown("당월(M)부터 향후 3개월(M+3)까지 총 4개월간의 수요를 종합하여 최적의 조달 물량을 수립합니다. **현재 실재고량**을 차감한 **순소요량**과 각 모델의 **오더 변동성(버퍼율)**을 실시간 연산하여 **최종 추천 조달량 및 금액**을 산출합니다.")
+    st.subheader("🎯 M ~ M+3 Rolling Forecast 조달 계획")
+    st.markdown("당월(M)부터 향후 3개월(M+3)까지 총 4개월간의 수요를 종합하여 최적의 조달 물량을 수립합니다. 각 모델의 **오더 변동성(버퍼율)**을 실시간 연산하여 **최종 추천 조달량**을 산출합니다.")
 
     st.markdown("---")
     st.markdown("#### ⚙️ 생판 반영물량 산출 설정")
@@ -203,7 +203,7 @@ with tab1:
 
         month_cols = [f"{mon.year}년 {mon.month}월" for mon in tgt_months]
         cols = [
-            '업체(거래선)', 'model', '불규칙오더(변동성) 등급', '단가(원)', '현재 실재고량'
+            '업체(거래선)', 'model', '불규칙오더(변동성) 등급'
         ] + month_cols
 
         if fcst_df is not None and not fcst_df.empty:
@@ -211,7 +211,7 @@ with tab1:
         else:
             cols += ['4개월 총합계(자재준비)']
 
-        cols += ['순소요량', '최종 추천 조달량', '최종 추천 조달 금액(백만원)']
+        cols += ['순소요량', '최종 추천 조달량']
 
         # 존재하는 컬럼만 선택
         cols = [c for c in cols if c in final_df.columns]
@@ -222,11 +222,10 @@ with tab1:
 
         # 📊 요약 메트릭 배치
         st.markdown("#### 📊 이번 달 롤링 조달 계획 요약")
-        sum_col1, sum_col2, sum_col3, sum_col4 = st.columns(4)
+        sum_col1, sum_col2, sum_col3 = st.columns(3)
         total_req = show_final['4개월 총합계(자재준비)'].sum() if '4개월 총합계(자재준비)' in show_final.columns else 0
         total_net = show_final['순소요량'].sum() if '순소요량' in show_final.columns else 0
         total_proc = show_final['최종 추천 조달량'].sum() if '최종 추천 조달량' in show_final.columns else 0
-        total_amt = show_final['최종 추천 조달 금액(백만원)'].sum() if '최종 추천 조달 금액(백만원)' in show_final.columns else 0.0
         
         with sum_col1:
             st.metric("총 4개월 예측량", f"{int(total_req):,} 개")
@@ -234,8 +233,6 @@ with tab1:
             st.metric("총 순소요량", f"{int(total_net):,} 개")
         with sum_col3:
             st.metric("총 추천 조달량", f"{int(total_proc):,} 개")
-        with sum_col4:
-            st.metric("💰 총 추천 조달 금액", f"{total_amt:,.2f} 백만 원")
 
         st.markdown("#### 📋 조달 세부 계획 테이블")
         st.dataframe(show_final, use_container_width=True, height=600)
