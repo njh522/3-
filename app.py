@@ -36,7 +36,7 @@ h1, h2, h3 { color: #F8F9FA; font-weight: 700; }
 """, unsafe_allow_html=True)
 
 st.title("📈 영업팀 물동량 예측기: Rolling Forecast (V5.0)")
-st.markdown("<p style='color:#A0AEC0; font-size:1.1rem;'>과거 3개년의 출하 실적 분석과 고객사 Forecast를 결합하여 최종 수요 계획을 수립함으로써 예측의 신뢰도를 극대화합니다. 데이터 기반의 체계적인 AI 분석으로 미래 물동량을 전망하여 영업담당자의 소극적인 물량 반영을 보완하고, 공급 부족(결품) 리스크 최소화 및 과재고 방지를 동시에 달성하는 차세대 의사결정 지원 플랫폼입니다.</p>", unsafe_allow_html=True)
+st.markdown("<p style='color:#A0AEC0; font-size:1.1rem;'>과거 3개년의 출하 실적 분석과 고객사 Forecast를 결합하여 최종 수요 계획을 수립함으로써 예측의 신뢰도를 극대화합니다.<br>데이터 기반의 체계적인 AI 분석으로 미래 물동량을 전망하여 영업담당자의 소극적인 물량 반영을 보완하고, 공급 부족(결품) 리스크 최소화 및 과재고 방지를 동시에 달성하는 의사결정 지원 플랫폼입니다.</p>", unsafe_allow_html=True)
 
 base_dir = r"C:\Users\power\OneDrive\바탕 화면\영업팀 실적파일"
 
