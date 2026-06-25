@@ -206,12 +206,7 @@ with tab1:
             '업체(거래선)', 'model', '불규칙오더(변동성) 등급'
         ] + month_cols
 
-        if fcst_df is not None and not fcst_df.empty:
-            cols += ['고객 요구량 합계(3개월)', '생산 선행량 합계(3개월)', '4개월 총합계(자재준비)']
-        else:
-            cols += ['4개월 총합계(자재준비)']
-
-        cols += ['순소요량', '최종 추천 조달량']
+        cols += ['4개월 총합계(자재준비)', '최종 추천 조달량']
 
         # 존재하는 컬럼만 선택
         cols = [c for c in cols if c in final_df.columns]
